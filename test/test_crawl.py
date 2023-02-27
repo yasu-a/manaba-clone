@@ -13,6 +13,8 @@ from sessctx import SessionContext
 
 logger = app_logging.create_logger()
 
+USE_MEMORY_DB = False
+
 
 class TestOpenerBasedCrawler(TestCase):
     @classmethod
@@ -40,7 +42,7 @@ class TestOpenerBasedCrawler(TestCase):
         create_new_session = True
 
         session_context = SessionContext.create_instance(
-            ':memory:',
+            ':memory:' if USE_MEMORY_DB else 'crawl_debug.db',
             model.crawl.SQLCrawlerDataModelBase
         )
 
@@ -74,11 +76,15 @@ class TestOpenerBasedCrawler(TestCase):
             self.assertFalse(len(answers))
 
 
-for seed in range(10):
-    TestOpenerBasedCrawler.add_test_for_seed(
-        'crawl',
-        seed=seed
-    )
+def setup_test():
+    for seed in range(10):
+        TestOpenerBasedCrawler.add_test_for_seed(
+            'crawl',
+            seed=seed
+        )
+
+
+setup_test()
 
 
 def fetch_answers(session):

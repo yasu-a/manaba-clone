@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, relationship
 from sqlalchemy.schema import Column, Index
 from sqlalchemy.types import INTEGER, TEXT, DATETIME, UnicodeText
 
+from crawl.url_mapping import MappedURL
 from model.common import SQLDataModelMixin, create_timestamp
 from .base import SQLCrawlerDataModelBase
 
@@ -50,6 +51,7 @@ class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
 class Lookup(SQLDataModelMixin, SQLCrawlerDataModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
     url = Column(TEXT, unique=True)
+    mapper_name = Column(TEXT)
 
     id_index = Index('id')
     url_index = Index('url')
@@ -66,19 +68,25 @@ class Lookup(SQLDataModelMixin, SQLCrawlerDataModelBase):
 
     @classmethod
     def lookup(
-            cls: Type['Lookup'],
+            cls,
             session: Session,
             *,
-            id: Optional[int] = __UNSPECIFIED,
-            url: Optional[str] = __UNSPECIFIED
+            id=__UNSPECIFIED,
+            url=__UNSPECIFIED
     ) -> 'Lookup':
         if (cls._is_specified(id) and cls._is_specified(url)) \
                 or (cls._is_unspecified(id) and cls._is_unspecified(url)):
             raise ValueError('either \'id\' or \'url\' should be specified')
 
         if cls._is_specified(id):
+            mapper_name = None
             filter_predicate = Lookup.id == id
         elif cls._is_specified(url):
+            if isinstance(url, MappedURL):
+                mapper_name = url.mapper_name
+                url = url.url
+            else:
+                mapper_name = None
             filter_predicate = Lookup.url == url
         else:
             assert False
@@ -93,7 +101,13 @@ class Lookup(SQLDataModelMixin, SQLCrawlerDataModelBase):
         if cls._is_specified(id):
             raise ValueError(f'unregistered {id=!r}')
         elif cls._is_specified(url):
-            entry = cls(id=string_hash_63(url), url=url)
+            if mapper_name is None and url is not None:
+                raise ValueError('new url entry must have non-null mapper_name')
+            entry = cls(
+                id=string_hash_63(url),
+                url=url,
+                mapper_name=mapper_name
+            )
         else:
             assert False
 
@@ -122,12 +136,12 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
     page = relationship('PageContent', foreign_keys=[page_id])
 
     @classmethod
-    def set_initial_urls(
+    def add_initial_url(
             cls: Type['Task'],
             session: Session,
             *,
             crawling_session: CrawlingSession,
-            initial_urls: list[str]
+            initial_mapped_url: MappedURL
     ) -> bool:
         entry_count = session.query(Task).filter(
             Task.crawling_session == crawling_session
@@ -136,19 +150,18 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
         if entry_count > 0:
             return False
 
-        for url in initial_urls:
-            cls.new_record(
-                session=session,
-                crawling_session=crawling_session,
-                lookup=Lookup.lookup(
-                    session,
-                    url=url
-                ),
-                back_lookup=Lookup.lookup(
-                    session,
-                    url=None
-                )
+        cls.new_record(
+            session=session,
+            crawling_session=crawling_session,
+            lookup=Lookup.lookup(
+                session,
+                url=initial_mapped_url
+            ),
+            back_lookup=Lookup.lookup(
+                session,
+                url=None
             )
+        )
         return True
 
     @classmethod
@@ -167,7 +180,9 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
         ).count()
 
         if entry_count > 0:
-            raise ValueError('all tasks with the same session should be unique')
+            raise ValueError('all tasks in the same crawling session should be unique')
+
+        assert lookup.url is not None
 
         entry = cls(
             crawling_session=crawling_session,
@@ -188,6 +203,7 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
             *,
             crawling_session: CrawlingSession,
     ) -> Optional['Task']:
+        # noinspection PyPep8
         entry = session.query(Task).filter(
             (Task.crawling_session == crawling_session) &
             (Task.page == None)
@@ -234,7 +250,7 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
         if no_tasks_with_page:
             return 0
 
-        # noinspection PyTypeChecker,PyComparisonWithNone
+        # noinspection PyTypeChecker,PyComparisonWithNone,PyPep8
         row_count = session.query(Task).filter(
             (Task.crawling_session == crawling_session) &
             (Task.page == None) &
@@ -249,7 +265,8 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
         return row_count
 
 
-# TODO: Change mapping into content_hash -> content; store timestamp in Task, not in this table.
+# TODO: Before working on the following TODO, investigate duplications of content hash on the table.
+# TODO: Change mapping into content_hash -> content; store timestamp on Task, not on this table.
 #       This change can reduce the size of database.
 class PageContent(SQLDataModelMixin, SQLCrawlerDataModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
@@ -273,12 +290,12 @@ class PageContent(SQLDataModelMixin, SQLCrawlerDataModelBase):
         return entry
 
 
-# noinspection PyComparisonWithNone,PyPep8
 def info_dict(
         session: Session,
         *,
         crawling_session: CrawlingSession
 ) -> dict[str, object]:
+    # noinspection PyPep8
     return {
         'tasks without content':
             session.query(func.count(Task.id)).filter(

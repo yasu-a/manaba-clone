@@ -4,4 +4,4 @@ from sqlalchemy.ext.declarative import declarative_base
 
 T = TypeVar('T')
 
-SQLScrapedDataModelBase = declarative_base()
+SQLScraperDataModelBase = declarative_base()

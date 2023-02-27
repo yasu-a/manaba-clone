@@ -5,12 +5,21 @@ import re
 __all__ = 'create_logger'
 
 
+# ANALYZER_ENABLED = True
+
+
 class CustomFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         s = super().format(record)
         m = re.match(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d{3}\s[^|]*?.(?=\|)', s)
         split_index = m.end()
-        return s[:split_index].ljust(60) + s[split_index:]
+        left, right = s[:split_index], s[split_index:]
+        s = left.ljust(60) + right
+
+        # if ANALYZER_ENABLED:
+        #     analyzer_callback(left, right)
+
+        return s
 
 
 def create_logger(name=None, cls: type = None) -> logging.Logger:
@@ -65,3 +74,40 @@ def create_logger(name=None, cls: type = None) -> logging.Logger:
     logger.addHandler(ch)
 
     return logger
+
+# class LogAnalyzer:
+#     def __init__(self):
+#         pass
+#
+#     def analyze_body(self, timestamp, body):
+#
+#     def analyze(self, left, right):
+#         datetime_string = re.match(r'\d+-\d+-\d+\s\d+:\d+:\d+', left).group()
+#         timestamp = dateutil.parser.parse(datetime_string)
+#
+#         body = right[2:]
+#
+#         self.analyze_body(timestamp, body)
+
+
+# ANALYZER_ADDRESS = 'localhost', 10001
+# ANALYZER_SERVER_ADDRESS = 'localhost', 10000
+#
+#
+# class MyHandler(BaseHTTPRequestHandler):
+#     def do_GET(self):
+#         pass
+#
+#
+# log_analyzer = LogAnalyzer()
+#
+#
+# def analyzer_callback(left, right):
+#     log_analyzer.analyze_body(left, right)
+#
+#
+# if __name__ == '__main__':
+#     if ANALYZER_ENABLED:
+#         httpd = HTTPServer(ANALYZER_SERVER_ADDRESS, MyHandler)
+#         th = threading.Thread(target=httpd.serve_forever)
+#         th.join()

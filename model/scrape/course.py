@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session, relationship
 from sqlalchemy.schema import Column
 from sqlalchemy.types import INTEGER, TEXT, DATETIME
 
-from model.common import *
+from model.common import SQLDataModelMixin, create_model_parameters
+from model.scrape import SQLScraperDataModelBase
 from persistent_hash import persistent_hash
 
 T = TypeVar('T')
@@ -14,7 +15,7 @@ T = TypeVar('T')
 __all__ = 'CourseInstructor', 'CourseSchedule', 'Course'
 
 
-class CourseInstructor(SQLDataModelMixin, SQLDataModelBase):
+class CourseInstructor(SQLDataModelMixin, SQLScraperDataModelBase):
     course_id = Column(INTEGER, ForeignKey('course.id'))
     name = Column(TEXT)
 
@@ -45,7 +46,7 @@ class CourseInstructor(SQLDataModelMixin, SQLDataModelBase):
             )
 
 
-class CourseSchedule(SQLDataModelBase, SQLDataModelMixin):
+class CourseSchedule(SQLDataModelMixin, SQLScraperDataModelBase):
     course_id = Column(INTEGER, ForeignKey('course.id'))
     year = Column(INTEGER)
     semester = Column(INTEGER)
@@ -104,7 +105,7 @@ class CourseSchedule(SQLDataModelBase, SQLDataModelMixin):
                     )
 
 
-class Course(SQLDataModelBase, SQLDataModelMixin):
+class Course(SQLDataModelMixin, SQLScraperDataModelBase):
     timestamp = Column(DATETIME)
     hash = Column(INTEGER)
     key = Column(TEXT)

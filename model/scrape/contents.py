@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.schema import Column
 from sqlalchemy.types import INTEGER, TEXT, DATETIME
 
-from model.common import *
+from model.common import SQLDataModelMixin, create_model_parameters
+from model.scrape import SQLScraperDataModelBase
 from persistent_hash import persistent_hash
 from .course import Course
 
@@ -14,7 +15,7 @@ T = TypeVar('T')
 __all__ = 'CourseContents',
 
 
-class CourseContents(SQLDataModelMixin, SQLDataModelBase):
+class CourseContents(SQLDataModelMixin, SQLScraperDataModelBase):
     course_id = Column(INTEGER, ForeignKey('course.id'))
     timestamp = Column(DATETIME)
     hash = Column(INTEGER)

@@ -1,6 +1,7 @@
 import contextlib
 import hashlib
 from typing import Callable
+from typing import Iterable
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
@@ -18,7 +19,7 @@ class SessionContext:
         self.__session_class = session_class
 
     @contextlib.contextmanager
-    def __call__(self):
+    def __call__(self) -> Iterable[Session]:
         session: Session = self.__session_class()
         session_index = hashlib.sha3_256(str(session).encode('utf-8')).hexdigest()[-8:]
         session_index = f'0x{session_index.upper()}'
