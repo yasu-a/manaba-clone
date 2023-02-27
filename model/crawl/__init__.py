@@ -236,15 +236,21 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
             *,
             crawling_session: CrawlingSession,
     ) -> int:
-        # noinspection PyTypeChecker
-        task_with_page_iter = session.query(Task, PageContent).filter(
+        sub_query = session.query(Task).with_entities(
+            Task.url_id
+        ).where(
+            Task.crawling_session == crawling_session
+        )
+
+        task_with_page_iter = session.query(Task).where(
+            Task.url_id.in_(sub_query) &
             (Task.crawling_session == crawling_session) &
-            (Task.page_id == PageContent.id)
+            (Task.page_id != None)
         )
 
         lookup_to_page = {}
-        for task, page in task_with_page_iter:
-            lookup_to_page[task.url_id] = page.id
+        for task in task_with_page_iter:
+            lookup_to_page[task.url_id] = task.page_id
 
         no_tasks_with_page = len(lookup_to_page) == 0
         if no_tasks_with_page:
