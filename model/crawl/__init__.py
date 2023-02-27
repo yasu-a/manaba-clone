@@ -20,6 +20,7 @@ def string_hash_63(string: Optional[str]) -> int:
     return int.from_bytes(bytes_digest[:8], byteorder='big') >> 1
 
 
+# TODO: adding index on timestamp may improve 'get_resumed_session'???
 class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
     timestamp = Column(DATETIME)

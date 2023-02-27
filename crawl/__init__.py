@@ -138,9 +138,9 @@ class DatabaseBasedCrawler(AbstractCrawler, metaclass=abc.ABCMeta):
 
                 crawling_executed = True
 
-        with self.__session_context() as session:
-            crawling_session \
-                = model.crawl.CrawlingSession.get_resumed_session(session)
+            # with self.__session_context() as session:
+            #     crawling_session \
+            #         = model.crawl.CrawlingSession.get_resumed_session(session)
 
             info_dict = model.crawl.info_dict(
                 session,
