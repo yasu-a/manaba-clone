@@ -9,9 +9,14 @@ import app_logging
 class TimerReport:
     def __init__(self):
         self.__times = []
+        self.__last_result = None
 
-    def append(self, value):
+    __UNSPECIFIED = object()
+
+    def append(self, value, result=__UNSPECIFIED):
         self.__times.append(value)
+        if result is not self.__UNSPECIFIED:
+            self.__last_result = result
 
     def __array(self, window_size=None, outlier=False):
         a = np.array(self.__times)
@@ -45,7 +50,8 @@ class TimerReport:
         return f'measured {self.count()} times' \
                f' with {self.outlier_count()} outlier(s),' \
                f' took {self.time_mean(outlier=False) * 1000:,.3f}' \
-               f' (± {self.time_std(outlier=False) * 1000:,.3f}) ms.'
+               f' (± {self.time_std(outlier=False) * 1000:,.3f}) ms.;' \
+               f' last result: {self.__last_result!r}'
 
 
 class Timer:
@@ -68,18 +74,18 @@ class Timer:
                 self.timeit(max_time=max_time, kwargs=single_kwargs)
             return
 
-        report_key = tuple(kwargs.items())
+        report_key = '<' + ', '.join(f'{k!s}={v!r}' for k, v in kwargs.items()) + '>'
 
         while True:
             app_logging.disable_logging()
             start = self.__perf_counter()
-            self.__func(**kwargs)
+            result = self.__func(**kwargs)
             end = self.__perf_counter()
             app_logging.enable_logging()
 
             elapsed = end - start
             report = self.__reports[report_key]
-            report.append(elapsed)
+            report.append(elapsed, result)
 
             if report.count() >= self.__MIN_COUNT:
                 mean = report.time_mean(self.__WINDOW_SIZE)
