@@ -1,8 +1,9 @@
 import inspect
 import logging
 import re
+from logging import NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL
 
-__all__ = 'create_logger'
+__all__ = 'create_logger', 'set_level', 'NOTSET', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
 
 
 # ANALYZER_ENABLED = True
@@ -20,6 +21,19 @@ class CustomFormatter(logging.Formatter):
         #     analyzer_callback(left, right)
 
         return s
+
+
+_loggers = []
+
+
+def _register_logger(logger):
+    _loggers.append(logger)
+
+
+def set_level(level):
+    global _loggers
+    for logger in _loggers:
+        logger.setLevel(level)
 
 
 def create_logger(name=None, cls: type = None) -> logging.Logger:
@@ -68,10 +82,11 @@ def create_logger(name=None, cls: type = None) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
     formatter = CustomFormatter('%(asctime)s [%(levelname)s] %(name)s | %(message)s')
     ch.setFormatter(formatter)
     logger.addHandler(ch)
+
+    _register_logger(logger)
 
     return logger
 
