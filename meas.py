@@ -3,8 +3,6 @@ import time
 
 import numpy as np
 
-import app_logging
-
 
 class TimerReport:
     def __init__(self):
@@ -77,11 +75,9 @@ class Timer:
         report_key = '<' + ', '.join(f'{k!s}={v!r}' for k, v in kwargs.items()) + '>'
 
         while True:
-            app_logging.disable_logging()
             start = self.__perf_counter()
             result = self.__func(**kwargs)
             end = self.__perf_counter()
-            app_logging.enable_logging()
 
             elapsed = end - start
             report = self.__reports[report_key]
