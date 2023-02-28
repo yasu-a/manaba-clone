@@ -23,19 +23,19 @@ class SessionContext:
         session: Session = self.__session_class()
         session_index = hashlib.sha3_256(str(session).encode('utf-8')).hexdigest()[-8:]
         session_index = f'0x{session_index.upper()}'
-        self.logger.info(f'session {session_index} CREATED')
+        self.logger.debug(f'session {session_index} CREATED')
         try:
             yield session
         except Exception as e:
             session.rollback()
-            self.logger.info(f'session {session_index} ROLLED BACK due to {e}')
+            self.logger.debug(f'session {session_index} ROLLED BACK due to {e}')
             raise
         else:
             session.commit()
-            self.logger.info(f'session {session_index} COMMITTED')
+            self.logger.debug(f'session {session_index} COMMITTED')
         finally:
             session.close()
-            self.logger.info(f'session {session_index} CLOSED')
+            self.logger.debug(f'session {session_index} CLOSED')
 
     @classmethod
     def create_session_class(cls, db_path: str, base) -> Callable[..., Session]:
@@ -47,4 +47,5 @@ class SessionContext:
     @classmethod
     def create_instance(cls, db_path: str, base):
         SessionClass = cls.create_session_class(db_path, base)
+        cls.logger.info(f'session context create: {db_path=}, {base=}')
         return cls(SessionClass)

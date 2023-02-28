@@ -42,12 +42,12 @@ class AbstractCrawler:
     def initialize(self, initial_urls: list[str]) -> None:
         raise NotImplementedError()
 
-    def crawl_once(self) -> bool:
+    def crawl_once(self, **kwargs) -> bool:
         raise NotImplementedError()
 
-    def crawl(self) -> None:
+    def crawl(self, **kwargs) -> None:
         while True:
-            crawling_executed = self.crawl_once()
+            crawling_executed = self.crawl_once(**kwargs)
             if not crawling_executed:
                 break
 
@@ -60,15 +60,18 @@ class DatabaseBasedCrawler(AbstractCrawler, metaclass=abc.ABCMeta):
         self.__session_context = session_context
         self.__crawling_session = None
 
+    @property
+    def session_context(self):
+        return self.__session_context
+
     def initialize(self, initial_urls: list[str]) -> None:
-        with self.__session_context() as session:
-            crawling_session \
-                = model.crawl.CrawlingSession.get_new_session(session)
+        with self.session_context() as session:
+            crawling_session = model.crawl.CrawlingSession.get_new_session(session)
 
             for initial_url in initial_urls:
                 mapped_url = self.map_url(initial_url)
                 if mapped_url is None:
-                    self.logger.warning('initial_url mapped to None')
+                    self.logger.warning(f'{initial_url=!r} mapped to None')
                     continue
 
                 model.crawl.Task.add_initial_url(
@@ -77,15 +80,34 @@ class DatabaseBasedCrawler(AbstractCrawler, metaclass=abc.ABCMeta):
                     initial_mapped_url=mapped_url
                 )
 
-    def crawl_once(self) -> bool:
+    RESUME_LATEST = 1
+    RESUME_OLDEST = 2
+
+    def _get_target_session(self, session, resume_state):
+        if resume_state == self.RESUME_LATEST:
+            crawling_session = model.crawl.CrawlingSession.get_session(
+                session,
+                state='unfinished',
+                order='latest'
+            )
+        elif resume_state == self.RESUME_OLDEST:
+            crawling_session = model.crawl.CrawlingSession.get_session(
+                session,
+                state='unfinished',
+                order='oldest'
+            )
+        else:
+            raise ValueError('invalid value specified for parameter \'resume_state\'', resume_state)
+        return crawling_session
+
+    def crawl_once(self, resume_state) -> bool:
         crawling_executed = False
 
-        self.logger.info('begin crawling')
+        self.logger.info('CRAWLING SESSION BEGIN')
 
-        with self.__session_context() as session:
+        with self.session_context() as session:
             # TODO: most of cpu time in this function spent here
-            crawling_session \
-                = model.crawl.CrawlingSession.get_resumed_session(session)
+            crawling_session = self._get_target_session(session, resume_state)
             self.logger.info(f'crawling session acquired: {crawling_session=}')
 
             fill_count = model.crawl.Task.fill_pages(
@@ -98,7 +120,7 @@ class DatabaseBasedCrawler(AbstractCrawler, metaclass=abc.ABCMeta):
                 session,
                 crawling_session=crawling_session
             )
-            self.logger.info(f'task open: {task=}')
+            self.logger.debug(f'task open: {task=}')
 
             if task is not None:
                 current_url = task.lookup.url
@@ -127,28 +149,26 @@ class DatabaseBasedCrawler(AbstractCrawler, metaclass=abc.ABCMeta):
                             )
                         )
                         new_task_count += 1
-                    self.logger.info(f'new tasks added: {new_task_count=}')
+                    self.logger.debug(f'new tasks added: {new_task_count=}')
 
                 model.crawl.Task.close_task(
                     session,
                     task=task,
                     content=content
                 )
-                self.logger.info(f'task closed: {task=}')
+                self.logger.debug(f'task closed: {task=}')
 
                 crawling_executed = True
-
-            # with self.__session_context() as session:
-            #     crawling_session \
-            #         = model.crawl.CrawlingSession.get_resumed_session(session)
 
             info_dict = model.crawl.info_dict(
                 session,
                 crawling_session=crawling_session
             )
-            self.logger.info(f'[summary] {crawling_executed=}, {info_dict=!r}')
+            info_dict |= {'crawling_executed': crawling_executed}
+            for k, v in info_dict.items():
+                self.logger.info(f'[SUMMARY] {k!s:30s} {v!r:>8s}')
 
-        self.logger.info('end crawling')
+        self.logger.info('CRAWLING SESSION END')
 
         return crawling_executed
 
@@ -205,3 +225,38 @@ class ManabaCrawler(OpenerBasedCrawler):
 
     def initialize_by_period(self, period: HomeCoursePeriod = PERIOD_ALL):
         self.initialize(initial_urls=list(period.iter_home_course_urls()))
+
+    # TODO: move this method into super class and resolve duplicated lines
+    def force_initialize_unfinished_oldest(self, period: HomeCoursePeriod = PERIOD_ALL):
+        initial_urls = list(period.iter_home_course_urls())
+
+        with self.session_context() as session:
+            crawling_session = model.crawl.CrawlingSession.get_session(
+                session,
+                state='finished',
+                order='oldest'
+            )
+
+            if crawling_session is None:
+                raise ValueError('finished tasks not found')
+
+            for initial_url in initial_urls:
+                mapped_url = self.map_url(initial_url)
+                if mapped_url is None:
+                    self.logger.warning(f'{initial_url=!r} mapped to None')
+                    continue
+
+                try:
+                    model.crawl.Task.add_initial_url(
+                        session,
+                        crawling_session=crawling_session,
+                        initial_mapped_url=mapped_url,
+                        force_append=True
+                    )
+                except ValueError as e:
+                    # TODO: make new exception
+                    if 'should be unique' not in e.args[0]:
+                        raise
+                    self.logger.warning(f'force append initial url failed: {initial_url=}')
+                else:
+                    self.logger.info(f'force append initial url success: {initial_url=}')

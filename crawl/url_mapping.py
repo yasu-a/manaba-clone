@@ -78,7 +78,7 @@ class URLMapper:
     def map(cls, url: str) -> Optional[MappedURL]:
         mapper_entry = cls.__find_mapper_entry(url)
         if mapper_entry is None:
-            cls.logger.info(f'mapper filtered: {url!r}')
+            cls.logger.debug(f'mapper filtered: {url!r}')
             return None
         mapped_url = mapper_entry.apply(url)
         cls.logger.debug(f'mapper mapped: {url!r} -> {mapped_url!r}')

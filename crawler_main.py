@@ -13,6 +13,8 @@ DATABASE_PATH = 'db/crawl.db'
 
 
 def main():
+    app_logging.set_level(app_logging.INFO)
+
     logger.info('main')
     lcm = cert.SocketLoginCertManager(launch_cert_server.HOST, launch_cert_server.PORT)
 
@@ -37,7 +39,7 @@ def main():
                 period=crawl.ManabaCrawler.PERIOD_ALL
             )
 
-        manaba_crawler.crawl()
+        manaba_crawler.crawl(resume_state=manaba_crawler.RESUME_OLDEST)
 
 
 if __name__ == '__main__':

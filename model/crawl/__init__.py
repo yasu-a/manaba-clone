@@ -1,7 +1,7 @@
 import hashlib
-from typing import Optional, Type, TypeVar, NamedTuple
+from typing import Literal, Optional, Type, TypeVar, NamedTuple
 
-from sqlalchemy import ForeignKey, desc, func, case
+from sqlalchemy import ForeignKey, func, case, distinct, asc, desc
 from sqlalchemy.orm import Session, relationship
 from sqlalchemy.schema import Column, Index
 from sqlalchemy.types import INTEGER, TEXT, DATETIME, UnicodeText
@@ -27,7 +27,7 @@ class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
 
     @classmethod
     def get_new_session(
-            cls: Type['CrawlingSession'],
+            cls,
             session: Session,
     ) -> 'CrawlingSession':
         entry = cls(timestamp=create_timestamp())
@@ -35,17 +35,82 @@ class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
         return entry
 
     @classmethod
-    def get_resumed_session(
-            cls: Type['CrawlingSession'],
+    def get_session(
+            cls,
             session: Session,
+            *,
+            state: Literal['finished', 'unfinished'],
+            order: Literal['latest', 'oldest']
     ) -> 'CrawlingSession':
-        entry = session.query(CrawlingSession).order_by(
-            desc(CrawlingSession.timestamp)
-            # desc(CrawlingSession.timestamp)
+        session_ids_unfinished = session.query(
+            distinct(Task.session_id)
+        ).join(
+            CrawlingSession
+        ).where(
+            Task.page_id == None
+        )
+
+        if state == 'unfinished':
+            target_session_ids = session_ids_unfinished
+        elif state == 'finished':
+            session_ids_finished = session.query(
+                distinct(Task.session_id)
+            ).where(
+                Task.session_id.not_in(session_ids_unfinished)
+            )
+            target_session_ids = session_ids_finished
+        else:
+            raise ValueError('parameter \'state\' must be either "finished" or "unfinished"')
+
+        order_func = {'latest': desc, 'oldest': asc}.get(order)
+        if order_func is None:
+            raise ValueError('parameter \'order\' must be either "latest" or "oldest"')
+
+        entry = session.query(
+            CrawlingSession
+        ).where(
+            CrawlingSession.id.in_(target_session_ids)
+        ).order_by(
+            order_func(CrawlingSession.timestamp)
         ).limit(1).first()
-        if entry is None:
-            raise ValueError('no entries to be resumed')
+
         return entry
+
+    # @classmethod
+    # def get_latest_session(
+    #         cls,
+    #         session: Session,
+    # ) -> 'CrawlingSession':
+    #     entry = session.query(CrawlingSession).order_by(
+    #         desc(CrawlingSession.timestamp)
+    #     ).limit(1).first()
+    #     if entry is None:
+    #         raise ValueError('no entries to be resumed')
+    #     return entry
+    #
+    # @classmethod
+    # def get_latest_done_session(
+    #         cls,
+    #         session: Session
+    # ) -> Optional['CrawlingSession']:
+    #     # FIXME: sqlalchemy.exc.InvalidRequestError
+    #     sub_query = session.query(
+    #         distinct(Task.session_id)
+    #     ).join(
+    #         CrawlingSession
+    #     ).where(
+    #         Task.page_id == None
+    #     )
+    #
+    #     entry = session.query(
+    #         CrawlingSession
+    #     ).where(
+    #         CrawlingSession.id.not_in(sub_query)
+    #     ).order_by(
+    #         desc(CrawlingSession.timestamp)
+    #     ).limit(1).first()
+    #
+    #     return entry
 
 
 # noinspection PyShadowingBuiltins
@@ -142,13 +207,15 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
             session: Session,
             *,
             crawling_session: CrawlingSession,
-            initial_mapped_url: MappedURL
+            initial_mapped_url: MappedURL,
+            force_append: bool = False
     ) -> bool:
         entry_count = session.query(Task).filter(
-            Task.crawling_session == crawling_session
+            (Task.crawling_session == crawling_session) &
+            (Task.page_id != None)
         ).count()
 
-        if entry_count > 0:
+        if not force_append and entry_count > 0:
             return False
 
         cls.new_record(
@@ -304,18 +371,18 @@ def info_dict(
 ) -> dict[str, object]:
     # noinspection PyPep8
     return {
-        'tasks without content':
+        'unfinished_task_count':
             session.query(func.count(Task.id)).filter(
                 (Task.page_id == None) &
                 (Task.crawling_session == crawling_session)
             ).scalar(),
-        'tasks with content':
+        'finished_task_count':
             session.query(func.count(Task.id)).filter(
                 (Task.page_id != None) &
                 (Task.crawling_session == crawling_session)
             ).scalar(),
-        'pages in db':
+        'whole_page_count':
             session.query(func.count(PageContent.id)).scalar(),
-        'lut size':
+        'whole_lookup_count':
             session.query(func.count(Lookup.id)).scalar(),
     }

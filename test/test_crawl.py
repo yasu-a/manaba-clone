@@ -28,6 +28,8 @@ class TestOpenerBasedCrawler(TestCase):
         setattr(cls, new_method_name, wrapper)
 
     def crawl(self, seed):
+        app_logging.set_level(app_logging.WARNING)
+
         try:
             files, answers = create_test_case(
                 num_htmls=50,
@@ -88,7 +90,11 @@ setup_test()
 
 
 def fetch_answers(session):
-    crawling_session = model.crawl.CrawlingSession.get_resumed_session(session)
+    crawling_session = model.crawl.CrawlingSession.get_session(
+        session,
+        state='finished',
+        order='latest'
+    )
 
     lookup = aliased(model.crawl.Lookup)
     back_lookup = aliased(model.crawl.Lookup)
