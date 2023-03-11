@@ -1,65 +1,126 @@
-from typing import Optional, Type, TypeVar
+import re
+from typing import Optional, TypeVar, Any
 
-from sqlalchemy import ForeignKey, desc
+import dateutil.parser
+from sqlalchemy import ForeignKey
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import Column
-from sqlalchemy.types import INTEGER, TEXT, DATETIME
+from sqlalchemy.types import INTEGER, TEXT, DATETIME, UnicodeText
 
-from model.common import SQLDataModelMixin, create_model_parameters
+import model.crawl
+from model.common import SQLDataModelMixin
 from model.scrape import SQLScraperDataModelBase
-from persistent_hash import persistent_hash
 from .course import Course
+from .soup_parser import SoupParser
 
 T = TypeVar('T')
 
-__all__ = 'CourseContents',
+__all__ = 'CourseContentsPage',
 
 
-class CourseContents(SQLDataModelMixin, SQLScraperDataModelBase):
+class CourseContentsPageSoupParser(SoupParser):
+    @property
+    def title(self):
+        elm = self._soup.select_one('h1.contents > a')
+        if elm is None:
+            return None
+        return elm.text.strip()
+
+    @property
+    def release_date(self):
+        elm = self._soup.select_one('.contents-modtime')
+        if elm is None:
+            return None
+        text = elm.text.strip()
+        m = re.search(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}', text)
+        string = m.group()
+        return dateutil.parser.parse(string)
+
+    @property
+    def body(self):
+        elm = self._soup.select_one('.contentbody-left')
+        if elm is None:
+            return None
+        inner_html \
+            = elm.decode_contents(formatter="html")
+        return inner_html
+
+
+class CourseContentsPage(SQLDataModelMixin, SQLScraperDataModelBase):
+    id = Column(INTEGER, primary_key=True)
+
     course_id = Column(INTEGER, ForeignKey('course.id'))
     timestamp = Column(DATETIME)
-    hash = Column(INTEGER)
-    key = Column(TEXT)
+    url = Column(TEXT)
     title = Column(TEXT)
     release_date = Column(DATETIME)
-
-    FIELD_NAMES = {'key', 'title', 'release_date'}
-
-    @classmethod
-    def get_latest_entry_with_same_hash(cls, session: Session, field: dict) -> bool:
-        assert isinstance(field, dict)
-        assert set(field.keys()) == cls.FIELD_NAMES
-
-        field_hash = persistent_hash(field)
-
-        course_contents_with_same_hash = session.query(Course).filter(
-            Course.hash == field_hash
-        ).order_by(
-            desc(Course.timestamp)
-        ).first()
-
-        return course_contents_with_same_hash
+    body = Column(UnicodeText)
 
     @classmethod
-    def insert(cls: Type[T], session: Session, field: dict, *, course: Course) -> Optional[T]:
-        assert isinstance(field, dict)
-        assert set(field.keys()) == cls.FIELD_NAMES
+    def find_duplication(
+            cls,
+            session: Session,
+            *,
+            values: dict[str, Any]
+    ):
+        query = session.query(cls)
+        for name, value in values.items():
+            attribute = getattr(cls, name)
+            query = query.where(attribute == value)
+        duplicated_entry: Optional[cls] = query.first()
+        return duplicated_entry
 
-        course_contents_with_same_hash = cls.get_latest_entry_with_same_hash(session, field)
-        if course_contents_with_same_hash is not None:
-            cls.logger.info(f'insertion cancelled {field!r}')
-            return course_contents_with_same_hash
-
-        course_news = cls(
-            **create_model_parameters(
-                field,
-                timestamp=True,
-                field_hash=True
-            ),
-            course=course
+    @classmethod
+    def exists(
+            cls,
+            session: Session,
+            *,
+            task_entry: model.crawl.Task
+    ) -> bool:
+        dup_entry = cls.find_duplication(
+            session,
+            values=dict(
+                timestamp=task_entry.timestamp,
+                url=task_entry.lookup.url
+            )
         )
-        session.add(course_news)
 
-        cls.logger.info(f'insertion done {field!r}')
+        return dup_entry is not None
 
-        return course_news
+    @classmethod
+    def from_task_entry(
+            cls,
+            *,
+            task_entry: model.crawl.Task
+    ) -> 'Course':
+        soup_parser = CourseContentsPageSoupParser.from_html(task_entry.page.content)
+
+        entry = cls(
+            timestamp=task_entry.timestamp,
+            url=task_entry.lookup.url,
+            **soup_parser.extract_properties('title', 'release_date', 'body')
+        )
+
+        return entry
+
+    @classmethod
+    def insert_from_task_entry(
+            cls,
+            session: Session,
+            *,
+            task_entry: model.crawl.Task
+    ) -> bool:
+        entry_exists = cls.exists(
+            session,
+            task_entry=task_entry
+        )
+        if entry_exists:
+            return False
+
+        entry = cls.from_task_entry(
+            task_entry=task_entry
+        )
+
+        session.add(entry)
+
+        return True

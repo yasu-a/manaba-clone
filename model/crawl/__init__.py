@@ -1,8 +1,9 @@
 import hashlib
-from typing import Literal, Optional, Type, TypeVar, NamedTuple
+from typing import Literal, Optional, Type, TypeVar, NamedTuple, Union
 
 from sqlalchemy import ForeignKey, func, case, distinct, asc, desc
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy.orm import Session, relationship, aliased
+from sqlalchemy.orm.query import Query
 from sqlalchemy.schema import Column, Index
 from sqlalchemy.types import INTEGER, TEXT, DATETIME, UnicodeText
 
@@ -25,6 +26,9 @@ class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
     timestamp = Column(DATETIME)
 
+    def __int__(self):
+        return self.id
+
     @classmethod
     def get_new_session(
             cls,
@@ -32,6 +36,16 @@ class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
     ) -> 'CrawlingSession':
         entry = cls(timestamp=create_timestamp())
         session.add(entry)
+        return entry
+
+    @classmethod
+    def get_session_by_id(
+            cls,
+            session: Session,
+            *,
+            id: int
+    ) -> 'CrawlingSession':
+        entry = session.query(CrawlingSession).where(CrawlingSession.id == id).first()
         return entry
 
     @classmethod
@@ -47,7 +61,7 @@ class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
         ).join(
             CrawlingSession
         ).where(
-            Task.page_id == None
+            Task.page_id.is_(None)
         )
 
         if state == 'unfinished':
@@ -75,42 +89,6 @@ class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
         ).limit(1).first()
 
         return entry
-
-    # @classmethod
-    # def get_latest_session(
-    #         cls,
-    #         session: Session,
-    # ) -> 'CrawlingSession':
-    #     entry = session.query(CrawlingSession).order_by(
-    #         desc(CrawlingSession.timestamp)
-    #     ).limit(1).first()
-    #     if entry is None:
-    #         raise ValueError('no entries to be resumed')
-    #     return entry
-    #
-    # @classmethod
-    # def get_latest_done_session(
-    #         cls,
-    #         session: Session
-    # ) -> Optional['CrawlingSession']:
-    #     # FIXME: sqlalchemy.exc.InvalidRequestError
-    #     sub_query = session.query(
-    #         distinct(Task.session_id)
-    #     ).join(
-    #         CrawlingSession
-    #     ).where(
-    #         Task.page_id == None
-    #     )
-    #
-    #     entry = session.query(
-    #         CrawlingSession
-    #     ).where(
-    #         CrawlingSession.id.not_in(sub_query)
-    #     ).order_by(
-    #         desc(CrawlingSession.timestamp)
-    #     ).limit(1).first()
-    #
-    #     return entry
 
 
 # noinspection PyShadowingBuiltins
@@ -190,20 +168,38 @@ class URLLinkage(NamedTuple):
 # noinspection PyPep8
 class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
+
     session_id = Column(INTEGER, ForeignKey('crawling_session.id'), nullable=False)
     url_id = Column(INTEGER, ForeignKey('lookup.id'), nullable=False)
     back_url_id = Column(INTEGER, ForeignKey('lookup.id'))
     timestamp = Column(DATETIME, nullable=False)
     page_id = Column(INTEGER, ForeignKey('page_content.id'))
 
-    crawling_session = relationship('CrawlingSession', foreign_keys=[session_id])
-    lookup = relationship('Lookup', foreign_keys=[url_id])
-    back_lookup = relationship('Lookup', foreign_keys=[back_url_id])
-    page = relationship('PageContent', foreign_keys=[page_id])
+    crawling_session = relationship('CrawlingSession', foreign_keys=[session_id], lazy="joined")
+    lookup = relationship('Lookup', foreign_keys=[url_id], lazy="joined")
+    back_lookup = relationship('Lookup', foreign_keys=[back_url_id], lazy="joined")
+    page = relationship('PageContent', foreign_keys=[page_id], lazy="joined")
+
+    # TODO: rename crawling_session to job
+    @classmethod
+    def list_mapper_names(
+            cls,
+            session: Session,
+            *,
+            crawling_session: Union[CrawlingSession, int]
+    ) -> set[str]:
+        query = session.query(Lookup.mapper_name).distinct().join(
+            Task,
+            Task.url_id == Lookup.id
+        ).where(
+            Task.session_id == int(crawling_session)
+        )
+
+        return {row[0] for row in query.all()}
 
     @classmethod
     def add_initial_url(
-            cls: Type['Task'],
+            cls,
             session: Session,
             *,
             crawling_session: CrawlingSession,
@@ -234,7 +230,7 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
 
     @classmethod
     def new_record(
-            cls: Type['Task'],
+            cls,
             session: Session,
             *,
             crawling_session: CrawlingSession,
@@ -271,7 +267,6 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
             *,
             crawling_session: CrawlingSession,
     ) -> Optional['Task']:
-        # noinspection PyPep8
         entry = session.query(Task).filter(
             (Task.crawling_session == crawling_session) &
             (Task.page == None)
@@ -324,7 +319,6 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
         if no_tasks_with_page:
             return 0
 
-        # noinspection PyTypeChecker,PyComparisonWithNone,PyPep8
         row_count = session.query(Task).filter(
             (Task.crawling_session == crawling_session) &
             (Task.page == None) &
@@ -337,6 +331,54 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
         }, synchronize_session='fetch')
 
         return row_count
+
+    # TODO: unify session and session_id of all the functions in this class
+    # TODO: remove unnecessary params
+    @classmethod
+    def query_joined(
+            cls,
+            session: Session,
+            *,
+            crawling_session: Union[CrawlingSession, int],
+            entities: list[str] = None,
+            target_mapper_name: str = None,
+            return_aliases: bool = False
+    ) -> Union[Query, tuple[Query, dict]]:
+        lookup = aliased(Lookup)
+        back_lookup = aliased(Lookup)
+        aliases = dict(lookup=lookup, back_lookup=back_lookup)
+
+        if entities is None:
+            query = session.query(Task)
+        else:
+            query = session.query(*map(eval, entities))
+
+        query = query.filter(
+            Task.session_id == int(crawling_session)
+        ).join(
+            aliases['lookup'],
+            Task.url_id == aliases['lookup'].id
+        ).join(
+            aliases['back_lookup'],
+            Task.back_url_id == aliases['back_lookup'].id
+        ).join(
+            PageContent,
+            Task.page_id == PageContent.id
+        ).where(
+            PageContent.content.is_not(None)
+        ).group_by(
+            aliases['lookup'].id
+        )
+
+        if target_mapper_name:
+            query = query.where(
+                aliases['lookup'].mapper_name == target_mapper_name
+            )
+
+        if return_aliases:
+            return query, aliases
+        else:
+            return query
 
 
 # TODO: Before working on the following TODO, investigate duplications of content hash on the table.
