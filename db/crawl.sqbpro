@@ -14,14 +14,16 @@ WHERE task.page_id IS NOT NULL AND task.url_id IN (
 	WHERE task.session_id == 1 AND task.page_id IS NULL
 );
 -- SELECT task.url_id FROM task WHERE task.session_id == 1 AND task.page_id IS NULL;
--- SELECT * FROM task INNER JOIN page_content ON task.page_id == page_content.id WHERE task.session_id == 1;</sql><sql name="SQL 4">SELECT DISTINCT L.url, L.mapper_name FROM task
-INNER JOIN lookup AS L ON task.url_id == L.id
-WHERE task.session_id == 2 AND L.mapper_name == &quot;course_list&quot;</sql><sql name="SQL 5">SELECT * FROM crawling_session
-WHERE crawling_session.id NOT IN (
-	SELECT crawling_session.id FROM task
-	INNER JOIN crawling_session ON crawling_session.id == task.session_id
-	WHERE task.page_id IS NULL
-	GROUP BY task.session_id
-)
-ORDER BY crawling_session.timestamp DESC
-LIMIT 1</sql><current_tab id="3"/></tab_sql></sqlb_project>
+-- SELECT * FROM task INNER JOIN page_content ON task.page_id == page_content.id WHERE task.session_id == 1;</sql><sql name="SQL 4">SELECT DISTINCT L.url, L.mapper_name FROM task
+INNER JOIN lookup AS L ON task.url_id == L.id
+WHERE task.session_id == 2 AND L.mapper_name == &quot;course_list&quot;</sql><sql name="SQL 5">SELECT * FROM crawling_session
+WHERE crawling_session.id NOT IN (
+	SELECT crawling_session.id FROM task
+	INNER JOIN crawling_session ON crawling_session.id == task.session_id
+	WHERE task.page_id IS NULL
+	GROUP BY task.session_id
+)
+ORDER BY crawling_session.timestamp DESC
+LIMIT 1</sql><sql name="SQL 6">SELECT lookup.mapper_name, task.session_id
+FROM lookup JOIN task ON task.url_id = lookup.id</sql><sql name="count session tasks">SELECT task.session_id, count(*) FROM task
+GROUP BY task.session_id</sql><current_tab id="5"/></tab_sql></sqlb_project>
