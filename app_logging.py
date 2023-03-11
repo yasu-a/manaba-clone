@@ -5,8 +5,9 @@ from logging import NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 __all__ = 'create_logger', 'set_level', 'NOTSET', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
 
-
 # ANALYZER_ENABLED = True
+
+_ljust_length = 0
 
 
 class CustomFormatter(logging.Formatter):
@@ -15,7 +16,11 @@ class CustomFormatter(logging.Formatter):
         m = re.match(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d{3}\s[^|]*?.(?=\|)', s)
         split_index = m.end()
         left, right = s[:split_index], s[split_index:]
-        s = left.ljust(60) + right
+
+        global _ljust_length
+        if len(left) > _ljust_length:
+            _ljust_length = len(left)
+        s = left.ljust(_ljust_length) + right
 
         # if ANALYZER_ENABLED:
         #     analyzer_callback(left, right)
