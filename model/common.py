@@ -22,10 +22,25 @@ class SQLDataModelMixin:
 
     @staticmethod
     def __map_repr_value(value):
-        if isinstance(value, str):
-            if len(value) > 128:
-                return f'<string with {len(value)}>'
+        if isinstance(value, (str, bytes)):
+            if len(value) >= 128:
+                return f'<{type(value).__name__} of length {len(value)}>'
         return value
+
+    def as_dict(self):
+        dct = {}
+        mapper = sqlalchemy_inspect(type(self))
+        for k in mapper.attrs.keys():
+            if not k.startswith('_'):
+                try:
+                    attr = getattr(self, k)
+                except DetachedInstanceError:
+                    attr = '<session not attached>'
+                if isinstance(attr, SQLDataModelMixin):
+                    attr = attr.as_dict()
+                attr = self.__map_repr_value(attr)
+                dct[k] = attr
+        return dct
 
     def __repr__(self):
         mapper = sqlalchemy_inspect(type(self))
