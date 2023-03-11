@@ -87,6 +87,7 @@ class URLMapper:
 
 # noinspection PyUnusedLocal
 class ManabaURLMapper(URLMapper):
+    # TODO: move into proper method local
     @staticmethod
     def course_list_mapper(url: str, parse_result: urllib.parse.ParseResult):
         query_mapping = dict(urllib.parse.parse_qsl(parse_result.query))
@@ -94,6 +95,7 @@ class ManabaURLMapper(URLMapper):
         new_parse_result = parse_result._replace(query=urllib.parse.urlencode(query_mapping))
         return new_parse_result
 
+    # TODO: move into proper method local
     @staticmethod
     def normalize_start_and_page_len_query(url: str, parse_result: urllib.parse.ParseResult):
         query_mapping = dict(urllib.parse.parse_qsl(parse_result.query))
@@ -104,6 +106,7 @@ class ManabaURLMapper(URLMapper):
         new_parse_result = parse_result._replace(query=urllib.parse.urlencode(query_mapping))
         return new_parse_result
 
+    # TODO: move into proper method local
     @staticmethod
     def remove_header_fragment(url: str, parse_result: urllib.parse.ParseResult):
         new_parse_result = parse_result._replace(fragment=None)
