@@ -61,9 +61,21 @@ class Split(NamedTuple):
             yield self._replace(body=body_line)
 
     def iter_multiline_splits(self):
-        for i, split in enumerate(self.iter_split_for_lines()):
+        splits = list(self.iter_split_for_lines())
+        for i, split in enumerate(splits):
+            replacement = {}
+            if len(splits) == 1:
+                replacement.update(separator='─')
+            else:
+                if i == 0:
+                    replacement.update(separator='┬')
+                elif i < len(splits) - 1:
+                    replacement.update(separator='│')
+                else:
+                    replacement.update(separator='└')
             if i != 0:
-                split = split._replace(name=' ..')
+                replacement.update(timestamp=' ... ', loglevel='', name='')
+            split = split._replace(**replacement)
             yield split
 
     def to_string(self, ljust_state: LeftAdjustState):
