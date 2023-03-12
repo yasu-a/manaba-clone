@@ -2,28 +2,96 @@ import inspect
 import logging
 import re
 from logging import NOTSET, DEBUG, INFO, WARNING, ERROR, CRITICAL
+from typing import NamedTuple
 
 __all__ = 'create_logger', 'set_level', 'NOTSET', 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
 
 # ANALYZER_ENABLED = True
 
-_ljust_length = 0
+__RE_TIMESTAMP = r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d{3}'
+__RE_LOGLEVEL = r'\[[A-Z]+\]'
+__RE_NAME = r'\S+'
+__RE_SEPARATOR = r'\|'
+__RE_BODY = r'.*'
+
+_RE_WHOLE_RECORD = r'\s'.join(
+    map(
+        '({})'.format,
+        [
+            __RE_TIMESTAMP,
+            __RE_LOGLEVEL,
+            __RE_NAME,
+            __RE_SEPARATOR,
+            __RE_BODY
+        ]
+    )
+)
+
+
+class LeftAdjustState:
+    def __init__(self, width=0):
+        self.__width = width
+
+    def __update(self, current_width):
+        if current_width > self.__width:
+            self.__width = current_width
+        return self.__width
+
+    def ljust(self, s: str):
+        width = self.__update(len(s))
+        return s.ljust(width)
+
+
+class Split(NamedTuple):
+    timestamp: str
+    loglevel: str
+    name: str
+    separator: str
+    body: str
+
+    @classmethod
+    def from_string(cls, s: str):
+        m = re.match(_RE_WHOLE_RECORD, s, re.DOTALL)
+
+        return cls(*m.groups())
+
+    def iter_split_for_lines(self):
+        body_lines = self.body.split('\n')
+        for body_line in body_lines:
+            yield self._replace(body=body_line)
+
+    def iter_multiline_splits(self):
+        for i, split in enumerate(self.iter_split_for_lines()):
+            if i != 0:
+                split = split._replace(name=' ..')
+            yield split
+
+    def to_string(self, ljust_state: LeftAdjustState):
+        header = ' '.join([self.timestamp, self.loglevel, self.name])
+        separator = self.separator
+        body = self.body
+
+        header = ljust_state.ljust(header)
+
+        return ' '.join([header, separator, body])
+
+
+_global_ljust_state = LeftAdjustState()
 
 
 class CustomFormatter(logging.Formatter):
+    def __init__(self):
+        super().__init__('%(asctime)s [%(levelname)s] %(name)s | %(message)s')
+
     def format(self, record: logging.LogRecord) -> str:
         s = super().format(record)
-        m = re.match(r'\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2},\d{3}\s[^|]*?.(?=\|)', s)
-        split_index = m.end()
-        left, right = s[:split_index], s[split_index:]
+        split = Split.from_string(s)
 
-        global _ljust_length
-        if len(left) > _ljust_length:
-            _ljust_length = len(left)
-        s = left.ljust(_ljust_length) + right
-
-        # if ANALYZER_ENABLED:
-        #     analyzer_callback(left, right)
+        global _global_ljust_state
+        s = '\n'.join(
+            line_split.to_string(_global_ljust_state)
+            for line_split in split.iter_multiline_splits()
+        )
 
         return s
 
@@ -87,7 +155,7 @@ def create_logger(name=None, cls: type = None) -> logging.Logger:
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG)
     ch = logging.StreamHandler()
-    formatter = CustomFormatter('%(asctime)s [%(levelname)s] %(name)s | %(message)s')
+    formatter = CustomFormatter()
     ch.setFormatter(formatter)
     logger.addHandler(ch)
 
