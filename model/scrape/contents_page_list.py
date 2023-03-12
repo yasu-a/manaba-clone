@@ -1,11 +1,11 @@
 import re
-from typing import Optional, TypeVar, Any
+from typing import Optional, Any
 
 import dateutil.parser
 from sqlalchemy import ForeignKey
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, relationship
 from sqlalchemy.schema import Column
-from sqlalchemy.types import INTEGER, TEXT, DATETIME, UnicodeText
+from sqlalchemy.types import INTEGER, TEXT, DATETIME
 
 import model.crawl
 from model.common import SQLDataModelMixin
@@ -13,12 +13,8 @@ from model.scrape import SQLScraperDataModelBase
 from .course import Course
 from .soup_parser import SoupParser
 
-T = TypeVar('T')
 
-__all__ = 'CourseContentsPage',
-
-
-class CourseContentsPageSoupParser(SoupParser):
+class CourseContentsPageListSoupParser(SoupParser):
     @property
     def title(self):
         elm = self._soup.select_one('h1.contents > a')
@@ -36,25 +32,22 @@ class CourseContentsPageSoupParser(SoupParser):
         string = m.group()
         return dateutil.parser.parse(string)
 
-    @property
-    def body(self):
-        elm = self._soup.select_one('.contentbody-left')
-        if elm is None:
-            return None
-        inner_html \
-            = elm.decode_contents(formatter="html")
-        return inner_html
 
-
-class CourseContentsPage(SQLDataModelMixin, SQLScraperDataModelBase):
+class CourseContentsPageList(SQLDataModelMixin, SQLScraperDataModelBase):
     id = Column(INTEGER, primary_key=True)
 
     course_id = Column(INTEGER, ForeignKey('course.id'))
     timestamp = Column(DATETIME)
     url = Column(TEXT)
+
     title = Column(TEXT)
     release_date = Column(DATETIME)
-    body = Column(UnicodeText)
+
+    contents_pages = relationship(
+        'CourseContentsPage',
+        backref='course_contents_page_list',
+        lazy="joined"
+    )
 
     @classmethod
     def find_duplication(
@@ -93,12 +86,12 @@ class CourseContentsPage(SQLDataModelMixin, SQLScraperDataModelBase):
             *,
             task_entry: model.crawl.Task
     ) -> 'Course':
-        soup_parser = CourseContentsPageSoupParser.from_html(task_entry.page.content)
+        soup_parser = CourseContentsPageListSoupParser.from_html(task_entry.page.content)
 
         entry = cls(
             timestamp=task_entry.timestamp,
             url=task_entry.lookup.url,
-            **soup_parser.extract_properties('title', 'release_date', 'body')
+            **soup_parser.extract_properties('title', 'release_date')
         )
 
         return entry

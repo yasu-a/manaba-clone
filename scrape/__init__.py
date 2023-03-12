@@ -1,24 +1,11 @@
-from functools import lru_cache
-from functools import lru_cache
 from typing import Literal
+
+from sqlalchemy.orm import Session
 
 import app_logging
 import model.crawl
 import model.scrape
 from sessctx import SessionContext
-
-
-class CrawlerDBReader:
-    def __init__(
-            self,
-            crawler_session_context: SessionContext
-    ):
-        self.__sc = crawler_session_context
-
-    @lru_cache
-    def read_soup(self, value):
-        with self.__sc() as session:
-            session.query(model.crawl.Task.page.content)
 
 
 def mapper_name_handler(*, mapper_name: str):
@@ -44,12 +31,16 @@ class MapperNameBasedHandlerMixin:
             if param['mapper_name'] == mapper_name:
                 return obj
 
-    def handle_by_mapper_name(self, task_entry: model.crawl.Task):
+    def handle_by_mapper_name(self, task_entry: model.crawl.Task, scraper_session: Session):
         mapper_name = task_entry.lookup.mapper_name
         handler = self.__find_mapper_name_handler(mapper_name)
         if handler:
             self.logger.debug(f'handling {mapper_name}')
-            handler(task_entry)
+            handler_kwargs = dict(
+                task_entry=task_entry,
+                scraper_session=scraper_session
+            )
+            handler(**handler_kwargs)
         else:
             self.logger.debug(f'ignored handling {mapper_name}')
 
@@ -85,12 +76,11 @@ class ManabaScraper(MapperNameBasedHandlerMixin):
     @staticmethod
     def implement_mapper_name_handler(mapper_name, scraper_model_class):
         @mapper_name_handler(mapper_name=mapper_name)
-        def impl(self, task_entry: model.crawl.Task):
-            with self.__scraper_sc() as session:
-                scraper_model_class.insert_from_task_entry(
-                    session,
-                    task_entry=task_entry
-                )
+        def impl(self, *, task_entry: model.crawl.Task, scraper_session: Session):
+            scraper_model_class.insert_from_task_entry(
+                scraper_session,
+                task_entry=task_entry
+            )
 
         return impl
 
@@ -102,7 +92,11 @@ class ManabaScraper(MapperNameBasedHandlerMixin):
         'course',
         model.scrape.Course
     )
-    # TODO: add handler for course_contents_page_list <- current
+    # noinspection PyUnresolvedReferences
+    handle_contents_page_list = implement_mapper_name_handler.__func__(
+        'course_contents_page_list',
+        model.scrape.CourseContentsPageList
+    )
     # noinspection PyUnresolvedReferences
     handle_contents_page = implement_mapper_name_handler.__func__(
         'course_contents_page',
@@ -110,12 +104,14 @@ class ManabaScraper(MapperNameBasedHandlerMixin):
     )
 
     def scrape_all(self):
-        with self.__crawler_sc() as session:
-            query = session.query(model.crawl.Task).where(
+        crawler_sessctx = self.__crawler_sc(do_commit=False)
+        scraper_sessctx = self.__scraper_sc()
+        with crawler_sessctx as crawler_session, scraper_sessctx as scraper_session:
+            query = crawler_session.query(model.crawl.Task).where(
                 model.crawl.Task.session_id == self.__active_session_id
             )
             for task_entry in query:
-                self.handle_by_mapper_name(task_entry)
+                self.handle_by_mapper_name(task_entry, scraper_session)
 
     # # TODO: move into model.crawl.Task
     # def iter_course_entries(

@@ -15,8 +15,9 @@ import app_logging
 class SessionContext:
     logger = app_logging.create_logger()
 
-    def __init__(self, session_class, do_commit=None):
+    def __init__(self, session_class, name=None, do_commit=None):
         self.__session_class = session_class
+        self.__name = name
         self.__do_commit = do_commit
 
     @staticmethod
@@ -32,12 +33,12 @@ class SessionContext:
         session: Session = self.__session_class()
         session_index = hashlib.sha3_256(str(session).encode('utf-8')).hexdigest()[-8:]
         session_index = f'0x{session_index.upper()}'
-        self.logger.debug(f'session {session_index} CREATED')
+        self.logger.debug(f'session {self.__name} {session_index} CREATED')
         try:
             yield session
         except Exception as e:
             session.rollback()
-            self.logger.debug(f'session {session_index} ROLLED BACK due to {e}')
+            self.logger.debug(f'session {self.__name} {session_index} ROLLED BACK due to {e}')
             raise
         else:
             do_commit_final = self.__eval_prioritized_values(
@@ -46,10 +47,10 @@ class SessionContext:
             )
             if do_commit_final:
                 session.commit()
-                self.logger.debug(f'session {session_index} COMMITTED')
+                self.logger.debug(f'session {self.__name} {session_index} COMMITTED')
         finally:
             session.close()
-            self.logger.debug(f'session {session_index} CLOSED')
+            self.logger.debug(f'session {self.__name} {session_index} CLOSED')
 
     @classmethod
     def create_session_class(cls, db_path: str, base) -> Callable[..., Session]:
@@ -62,4 +63,4 @@ class SessionContext:
     def create_instance(cls, db_path: str, base, **kwargs):
         SessionClass = cls.create_session_class(db_path, base)
         cls.logger.info(f'session context created: {db_path=}, {base=}')
-        return cls(SessionClass, **kwargs)
+        return cls(SessionClass, name=db_path, **kwargs)

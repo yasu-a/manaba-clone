@@ -33,17 +33,7 @@ def main():
         order='oldest'
     )
 
-    with scraper_session_context() as scraper_session:
-        # logger.info('iterating courses')
-        # for crawling_entry in mnb.iter_course_entries():
-        #     logger.info(f'course retrieved {crawling_entry}')
-        #     course = model.scrape.Course.from_scraping_entry(
-        #         scraper_session,
-        #         crawling_entry=crawling_entry
-        #     )
-        #     logger.info(f'{course=}')
-        #     scraper_session.add(course)
-        mnb.scrape_all()
+    mnb.scrape_all()
 
 
 if __name__ == '__main__':

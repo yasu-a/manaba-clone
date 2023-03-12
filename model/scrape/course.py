@@ -11,8 +11,6 @@ from model.common import SQLDataModelMixin
 from model.scrape import SQLScraperDataModelBase
 from .soup_parser import SoupParser
 
-__all__ = 'CourseInstructor', 'CourseSchedule', 'Course'
-
 
 class CourseInstructor(SQLDataModelMixin, SQLScraperDataModelBase):
     id = Column(INTEGER, primary_key=True)
