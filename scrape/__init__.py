@@ -110,6 +110,9 @@ class ManabaScraper(MapperNameBasedHandlerMixin):
             query = crawler_session.query(model.crawl.Task).where(
                 model.crawl.Task.session_id == self.__active_session_id
             )
+
+            query = query.limit(200)  # TODO: REMOVE THIS LINE!!!!!!
+
             for task_entry in query:
                 self.handle_by_mapper_name(task_entry, scraper_session)
 
