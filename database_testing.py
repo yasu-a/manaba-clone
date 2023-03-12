@@ -1,5 +1,7 @@
 from pprint import pprint
 
+from sqlalchemy.orm import *
+
 import app_logging
 import model.crawl
 import model.scrape
@@ -32,6 +34,29 @@ def test_1():
         result = query.first()
         pprint(result.as_dict())
         print()
+
+
+@test(enabled=True)
+def test_2():
+    with crawler_session_context(do_commit=False) as session:
+        base_task = aliased(model.crawl.Task)
+        next_task = aliased(model.crawl.Task)
+
+        query = session.query(base_task).join(
+            next_task,
+            base_task.url_id == next_task.back_url_id
+        ).where(
+            base_task.session_id == 1
+        ).where(
+            next_task.session_id == 1
+        )
+
+        print()
+        print(query)
+        print()
+        for r in query.limit(10).all():
+            pprint(r.as_dict())
+        print(query.count())
 
 
 if __name__ == '__main__':

@@ -15,18 +15,20 @@ class ManabaMapperHandlerImpl:
             mapper_name=None, scraper_model_class=None, /, *, ignore=False
     ):
         @mapper_handler(mapper_name=mapper_name)
-        def impl(self, *, task_entry: model.crawl.Task, scraper_session: Session):
+        def impl(self, *, task_entry: model.crawl.Task, scraper_session: Session) -> bool:
             if ignore:
-                return
+                return False
 
-            scraper_model_class.insert_from_task_entry(
+            result = scraper_model_class.insert_from_task_entry(
                 scraper_session,
                 task_entry=task_entry
             )
+            assert isinstance(result, bool)
+            return result
 
         return impl
 
-    # TODO: after updating python to 3.10, remove '.__func__' and remove noinspection; see:
+    # TODO: after updating python to 3.10, remove '.__func__' and noinspection; see:
     #  https://stackoverflow.com/questions/12718187/python-version-3-9-calling-class-staticmethod
     #  -within-the-class-body
     course_list_handler = implement_mapper_name_handler.__func__(
@@ -86,15 +88,28 @@ class ManabaScraper(MapperHandlerMixin, ManabaMapperHandlerImpl):
             self.__active_session_id = crawling_session.id
         return self.__active_session_id
 
+    def scrape(self, crawler_session: Session, scraper_session: Session,
+               task_entry: model.crawl.Task):
+        handled = self.handle_by_mapper_name(task_entry, scraper_session)
+
+        if handled:
+            for next_task_entry in model.crawl.Task.iter_next(
+                    crawler_session,
+                    base_task=task_entry
+            ):
+                self.scrape(crawler_session, scraper_session, next_task_entry)
+
     def scrape_all(self):
         crawler_sessctx = self.__crawler_sc(do_commit=False)
         scraper_sessctx = self.__scraper_sc()
         with crawler_sessctx as crawler_session, scraper_sessctx as scraper_session:
-            query = crawler_session.query(model.crawl.Task).where(
-                model.crawl.Task.session_id == self.__active_session_id
-            )
+            for root_task in model.crawl.Task.iter_roots(
+                    crawler_session,
+                    crawling_session=self.__active_session_id
+            ):
+                self.scrape(crawler_session, scraper_session, root_task)
 
-            query = query.limit(200)  # TODO: REMOVE THIS LINE!!!!!!
-
-            for task_entry in query:
-                self.handle_by_mapper_name(task_entry, scraper_session)
+            # query = query.limit(200)  # TODO: REMOVE THIS LINE!!!!!!
+            #
+            # for task_entry in query:
+            #     self.handle_by_mapper_name(task_entry, scraper_session)

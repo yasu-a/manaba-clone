@@ -1,9 +1,8 @@
 import hashlib
-from typing import Literal, Optional, Type, TypeVar, NamedTuple, Union
+from typing import Literal, Optional, Type, TypeVar, NamedTuple, Union, Iterable
 
 from sqlalchemy import ForeignKey, func, case, distinct, asc, desc
 from sqlalchemy.orm import Session, relationship, aliased
-from sqlalchemy.orm.query import Query
 from sqlalchemy.schema import Column, Index
 from sqlalchemy.types import INTEGER, TEXT, DATETIME, UnicodeText
 
@@ -262,7 +261,7 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
     # noinspection PyComparisonWithNone,PyPep8
     @classmethod
     def open_task(
-            cls: Type['Task'],
+            cls,
             session: Session,
             *,
             crawling_session: CrawlingSession,
@@ -281,7 +280,7 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
 
     @classmethod
     def close_task(
-            cls: Type['Task'],
+            cls,
             session: Session,
             *,
             task: 'Task',
@@ -294,7 +293,7 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
 
     @classmethod
     def fill_pages(
-            cls: Type['Task'],
+            cls,
             session: Session,
             *,
             crawling_session: CrawlingSession,
@@ -332,53 +331,121 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
 
         return row_count
 
-    # TODO: unify session and session_id of all the functions in this class
-    # TODO: remove unnecessary params
+    # TODO: USE THIS!!!
     @classmethod
-    def query_joined(
+    def session_query(
             cls,
             session: Session,
             *,
             crawling_session: Union[CrawlingSession, int],
-            entities: list[str] = None,
-            target_mapper_name: str = None,
-            return_aliases: bool = False
-    ) -> Union[Query, tuple[Query, dict]]:
-        lookup = aliased(Lookup)
-        back_lookup = aliased(Lookup)
-        aliases = dict(lookup=lookup, back_lookup=back_lookup)
-
-        if entities is None:
-            query = session.query(Task)
-        else:
-            query = session.query(*map(eval, entities))
-
-        query = query.filter(
-            Task.session_id == int(crawling_session)
-        ).join(
-            aliases['lookup'],
-            Task.url_id == aliases['lookup'].id
-        ).join(
-            aliases['back_lookup'],
-            Task.back_url_id == aliases['back_lookup'].id
-        ).join(
-            PageContent,
-            Task.page_id == PageContent.id
-        ).where(
-            PageContent.content.is_not(None)
-        ).group_by(
-            aliases['lookup'].id
+    ):
+        query = session.query(cls).where(
+            cls.session_id == int(crawling_session)
         )
 
-        if target_mapper_name:
-            query = query.where(
-                aliases['lookup'].mapper_name == target_mapper_name
-            )
+        return query
 
-        if return_aliases:
-            return query, aliases
-        else:
-            return query
+    @classmethod
+    def iter_roots(
+            cls,
+            session: Session,
+            *,
+            crawling_session: Union[CrawlingSession, int]
+    ) -> Iterable['Task']:
+        back_lookup = aliased(Lookup)
+
+        query = session.query(Task).where(
+            Task.session_id == int(crawling_session)
+        ).join(
+            back_lookup,
+            back_lookup.id == Task.back_url_id
+        ).where(
+            back_lookup.url.is_(None)
+        )
+
+        yield from query
+
+    @classmethod
+    def iter_next(
+            cls,
+            session: Session,
+            *,
+            base_task: 'Task'
+    ) -> Iterable['Task']:
+        back_task = aliased(cls)
+
+        query = session.query(cls).where(
+            cls.crawling_session == base_task.crawling_session
+        ).join(
+            back_task,
+            back_task.url_id == cls.back_url_id
+        ).where(
+            back_task.id == base_task.id
+        ).where(
+            back_task.crawling_session == base_task.crawling_session
+        )
+
+        yield from query
+        # current_task = aliased(cls)
+        # next_task = aliased(cls)
+        #
+        # current_tasks = current_task.session_query(crawling_session)
+        #
+        # current_lookup = aliased(Lookup)
+        # next_lookup = aliased(Lookup)
+        #
+        # session.query(current_tasks).join(
+        #     cls,
+        #     current_tasks.url_id == current_tasks.
+        # )
+
+    # # TODO: unify session and session_id of all the functions in this class
+    # # TODO: remove unnecessary params
+    # @classmethod
+    # def query_joined(
+    #         cls,
+    #         session: Session,
+    #         *,
+    #         crawling_session: Union[CrawlingSession, int],
+    #         entities: list[str] = None,
+    #         target_mapper_name: str = None,
+    #         return_aliases: bool = False
+    # ) -> Union[Query, tuple[Query, dict]]:
+    #     lookup = aliased(Lookup)
+    #     back_lookup = aliased(Lookup)
+    #     aliases = dict(lookup=lookup, back_lookup=back_lookup)
+    #
+    #     if entities is None:
+    #         query = session.query(Task)
+    #     else:
+    #         query = session.query(*map(eval, entities))
+    #
+    #     query = query.filter(
+    #         Task.session_id == int(crawling_session)
+    #     ).join(
+    #         aliases['lookup'],
+    #         Task.url_id == aliases['lookup'].id
+    #     ).join(
+    #         aliases['back_lookup'],
+    #         Task.back_url_id == aliases['back_lookup'].id
+    #     ).join(
+    #         PageContent,
+    #         Task.page_id == PageContent.id
+    #     ).where(
+    #         PageContent.content.is_not(None)
+    #     ).group_by(
+    #         aliases['lookup'].id
+    #     )
+    #
+    #     if target_mapper_name:
+    #         query = query.where(
+    #             aliases['lookup'].mapper_name == target_mapper_name
+    #         )
+    #
+    #     if return_aliases:
+    #         return query, aliases
+    #     else:
+    #         return query
 
 
 # TODO: Before working on the following TODO, investigate duplications of content hash on the table.

@@ -1,4 +1,5 @@
 from pprint import pformat
+from typing import Callable
 
 from sqlalchemy.orm import Session
 
@@ -21,7 +22,7 @@ class MapperHandlerMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def __find_mapper_name_handler(self, mapper_name: str):
+    def __find_mapper_name_handler(self, mapper_name: str) -> Callable[..., bool]:
         for name in dir(self):
             obj = getattr(self, name)
             param = getattr(obj, '_mapper_name_handler', None)
@@ -30,7 +31,7 @@ class MapperHandlerMixin:
             if param['mapper_name'] == mapper_name:
                 return obj
 
-    def handle_by_mapper_name(self, task_entry: model.crawl.Task, scraper_session: Session):
+    def handle_by_mapper_name(self, task_entry: model.crawl.Task, scraper_session: Session) -> bool:
         mapper_name = task_entry.lookup.mapper_name
         handler = self.__find_mapper_name_handler(mapper_name)
         if handler:
@@ -39,6 +40,7 @@ class MapperHandlerMixin:
                 task_entry=task_entry,
                 scraper_session=scraper_session
             )
-            handler(**handler_kwargs)
+            return handler(**handler_kwargs)
         else:
             self.logger.warning(f'IGNORED HANDLING {mapper_name}\n{pformat(task_entry.as_dict())}')
+            return False
