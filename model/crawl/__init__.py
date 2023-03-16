@@ -55,7 +55,7 @@ class Job(SQLDataModelMixin, SQLCrawlerDataModelBase):
             state: Literal['finished', 'unfinished'],
             order: Literal['latest', 'oldest']
     ) -> 'Job':
-        session_ids_unfinished = session.query(
+        job_ids_unfinished = session.query(
             distinct(Task.job_id)
         ).join(
             Job
@@ -64,14 +64,14 @@ class Job(SQLDataModelMixin, SQLCrawlerDataModelBase):
         )
 
         if state == 'unfinished':
-            target_session_ids = session_ids_unfinished
+            target_job_ids = job_ids_unfinished
         elif state == 'finished':
-            session_ids_finished = session.query(
+            job_ids_finished = session.query(
                 distinct(Task.job_id)
             ).where(
-                Task.job_id.not_in(session_ids_unfinished)
+                Task.job_id.not_in(job_ids_unfinished)
             )
-            target_session_ids = session_ids_finished
+            target_job_ids = job_ids_finished
         else:
             raise ValueError('parameter \'state\' must be either "finished" or "unfinished"')
 
@@ -82,7 +82,7 @@ class Job(SQLDataModelMixin, SQLCrawlerDataModelBase):
         entry = session.query(
             Job
         ).where(
-            Job.id.in_(target_session_ids)
+            Job.id.in_(target_job_ids)
         ).order_by(
             order_func(Job.timestamp)
         ).limit(1).first()
@@ -270,7 +270,7 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
         entry = session.query(Task).filter(
             and_(
                 Task.job == job,
-                Task.page.is_(None)
+                Task.page_id.is_(None)
             )
         ).order_by(
             desc(Task.timestamp)
@@ -326,7 +326,7 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
         row_count = session.query(Task).filter(
             and_(
                 Task.job == job,
-                Task.page.is_(None),
+                Task.page_id.is_(None),
                 Task.url_id.in_(lookup_to_page.keys())
             )
         ).update({

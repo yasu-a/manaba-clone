@@ -73,7 +73,7 @@ class ManabaScraper(GroupHandlerMixin, ManabaGroupHandlerImpl):
         self.__crawler_sc = crawler_session_context
         self.__scraper_sc = scraper_session_context
 
-        self.__active_session_id = None
+        self.__active_job_id = None
 
     def set_active_job(
             self,
@@ -86,8 +86,8 @@ class ManabaScraper(GroupHandlerMixin, ManabaGroupHandlerImpl):
                 state=state,
                 order=order
             )
-            self.__active_session_id = job.id
-        return self.__active_session_id
+            self.__active_job_id = job.id
+        return self.__active_job_id
 
     def scrape(self, crawler_session: Session, scraper_session: Session,
                task_entry: model.crawl.Task):
@@ -106,6 +106,6 @@ class ManabaScraper(GroupHandlerMixin, ManabaGroupHandlerImpl):
         with crawler_sessctx as crawler_session, scraper_sessctx as scraper_session:
             for root_task in model.crawl.Task.iter_roots(
                     crawler_session,
-                    job=self.__active_session_id
+                    job=self.__active_job_id
             ):
                 self.scrape(crawler_session, scraper_session, root_task)

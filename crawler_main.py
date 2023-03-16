@@ -18,7 +18,7 @@ def main():
     logger.info('main')
     lcm = cert.SocketLoginCertManager(launch_cert_server.HOST, launch_cert_server.PORT)
 
-    create_new_session = True  # input('new session [y/n] > ').lower() == 'y'
+    create_new_session = False  # input('new session [y/n] > ').lower() == 'y'
     logger.info(f'{create_new_session=}')
 
     with opener.ManabaURLOpener(
