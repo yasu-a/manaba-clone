@@ -1,13 +1,13 @@
 import hashlib
 from typing import Literal, Optional, Type, TypeVar, NamedTuple, Union, Iterable
 
-from sqlalchemy import ForeignKey, func, case, distinct, asc, desc
+from sqlalchemy import ForeignKey, func, case, distinct, asc, desc, and_
 from sqlalchemy.orm import Session, relationship, aliased
 from sqlalchemy.schema import Column, Index
 from sqlalchemy.types import INTEGER, TEXT, DATETIME, UnicodeText
 
-from crawl.url_mapping import MappedURL
 from model.common import SQLDataModelMixin, create_timestamp
+from worker.crawl.page_family import GroupedURL
 from .base import SQLCrawlerDataModelBase
 
 T = TypeVar('T')
@@ -21,7 +21,7 @@ def string_hash_63(string: Optional[str]) -> int:
 
 
 # TODO: adding index on timestamp may improve 'get_resumed_session'???
-class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
+class Job(SQLDataModelMixin, SQLCrawlerDataModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
     timestamp = Column(DATETIME)
 
@@ -32,7 +32,7 @@ class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
     def get_new_session(
             cls,
             session: Session,
-    ) -> 'CrawlingSession':
+    ) -> 'Job':
         entry = cls(timestamp=create_timestamp())
         session.add(entry)
         return entry
@@ -42,23 +42,23 @@ class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
             cls,
             session: Session,
             *,
-            id: int
-    ) -> 'CrawlingSession':
-        entry = session.query(CrawlingSession).where(CrawlingSession.id == id).first()
+            job_id: int
+    ) -> 'Job':
+        entry = session.query(Job).where(Job.id == job_id).first()
         return entry
 
     @classmethod
-    def get_session(
+    def get_job(
             cls,
             session: Session,
             *,
             state: Literal['finished', 'unfinished'],
             order: Literal['latest', 'oldest']
-    ) -> 'CrawlingSession':
+    ) -> 'Job':
         session_ids_unfinished = session.query(
-            distinct(Task.session_id)
+            distinct(Task.job_id)
         ).join(
-            CrawlingSession
+            Job
         ).where(
             Task.page_id.is_(None)
         )
@@ -67,9 +67,9 @@ class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
             target_session_ids = session_ids_unfinished
         elif state == 'finished':
             session_ids_finished = session.query(
-                distinct(Task.session_id)
+                distinct(Task.job_id)
             ).where(
-                Task.session_id.not_in(session_ids_unfinished)
+                Task.job_id.not_in(session_ids_unfinished)
             )
             target_session_ids = session_ids_finished
         else:
@@ -80,11 +80,11 @@ class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
             raise ValueError('parameter \'order\' must be either "latest" or "oldest"')
 
         entry = session.query(
-            CrawlingSession
+            Job
         ).where(
-            CrawlingSession.id.in_(target_session_ids)
+            Job.id.in_(target_session_ids)
         ).order_by(
-            order_func(CrawlingSession.timestamp)
+            order_func(Job.timestamp)
         ).limit(1).first()
 
         return entry
@@ -94,7 +94,7 @@ class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
 class Lookup(SQLDataModelMixin, SQLCrawlerDataModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
     url = Column(TEXT, unique=True)
-    mapper_name = Column(TEXT)
+    group_name = Column(TEXT)
 
     id_index = Index('id')
     url_index = Index('url')
@@ -122,14 +122,14 @@ class Lookup(SQLDataModelMixin, SQLCrawlerDataModelBase):
             raise ValueError('either \'id\' or \'url\' should be specified')
 
         if cls._is_specified(id):
-            mapper_name = None
+            group_name = None
             filter_predicate = Lookup.id == id
         elif cls._is_specified(url):
-            if isinstance(url, MappedURL):
-                mapper_name = url.mapper_name
+            if isinstance(url, GroupedURL):
+                group_name = url.group_name
                 url = url.url
             else:
-                mapper_name = None
+                group_name = None
             filter_predicate = Lookup.url == url
         else:
             assert False
@@ -144,12 +144,12 @@ class Lookup(SQLDataModelMixin, SQLCrawlerDataModelBase):
         if cls._is_specified(id):
             raise ValueError(f'unregistered {id=!r}')
         elif cls._is_specified(url):
-            if mapper_name is None and url is not None:
-                raise ValueError('new url entry must have non-null mapper_name')
+            if group_name is None and url is not None:
+                raise ValueError('new url entry must have non-null group_name')
             entry = cls(
                 id=string_hash_63(url),
                 url=url,
-                mapper_name=mapper_name
+                group_name=group_name
             )
         else:
             assert False
@@ -168,30 +168,29 @@ class URLLinkage(NamedTuple):
 class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
 
-    session_id = Column(INTEGER, ForeignKey('crawling_session.id'), nullable=False)
+    job_id = Column(INTEGER, ForeignKey('job.id'), nullable=False)
     url_id = Column(INTEGER, ForeignKey('lookup.id'), nullable=False)
     back_url_id = Column(INTEGER, ForeignKey('lookup.id'))
     timestamp = Column(DATETIME, nullable=False)
     page_id = Column(INTEGER, ForeignKey('page_content.id'))
 
-    crawling_session = relationship('CrawlingSession', foreign_keys=[session_id], lazy="joined")
+    job = relationship('Job', foreign_keys=[job_id], lazy="joined")
     lookup = relationship('Lookup', foreign_keys=[url_id], lazy="joined")
     back_lookup = relationship('Lookup', foreign_keys=[back_url_id], lazy="joined")
     page = relationship('PageContent', foreign_keys=[page_id], lazy="joined")
 
-    # TODO: rename crawling_session to job
     @classmethod
-    def list_mapper_names(
+    def list_group_names(
             cls,
             session: Session,
             *,
-            crawling_session: Union[CrawlingSession, int]
+            job: Union[Job, int]
     ) -> set[str]:
-        query = session.query(Lookup.mapper_name).distinct().join(
+        query = session.query(Lookup.group_name).distinct().join(
             Task,
             Task.url_id == Lookup.id
         ).where(
-            Task.session_id == int(crawling_session)
+            Task.job_id == int(job)
         )
 
         return {row[0] for row in query.all()}
@@ -201,13 +200,15 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
             cls,
             session: Session,
             *,
-            crawling_session: CrawlingSession,
-            initial_mapped_url: MappedURL,
+            job: Job,
+            initial_mapped_url: GroupedURL,
             force_append: bool = False
     ) -> bool:
         entry_count = session.query(Task).filter(
-            (Task.crawling_session == crawling_session) &
-            (Task.page_id != None)
+            and_(
+                Task.job == job,
+                Task.page_id.is_not(None)
+            )
         ).count()
 
         if not force_append and entry_count > 0:
@@ -215,7 +216,7 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
 
         cls.new_record(
             session=session,
-            crawling_session=crawling_session,
+            job=job,
             lookup=Lookup.lookup(
                 session,
                 url=initial_mapped_url
@@ -232,12 +233,12 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
             cls,
             session: Session,
             *,
-            crawling_session: CrawlingSession,
+            job: Job,
             lookup: Lookup,
             back_lookup: Lookup
     ) -> 'Task':
         entry_count = session.query(Task).filter(
-            (Task.crawling_session == crawling_session) &
+            (Task.job == job) &
             (Task.lookup == lookup) &
             (Task.back_lookup == back_lookup)
         ).count()
@@ -248,7 +249,7 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
         assert lookup.url is not None
 
         entry = cls(
-            crawling_session=crawling_session,
+            job=job,
             lookup=lookup,
             back_lookup=back_lookup,
             timestamp=create_timestamp(),
@@ -264,11 +265,13 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
             cls,
             session: Session,
             *,
-            crawling_session: CrawlingSession,
+            job: Job,
     ) -> Optional['Task']:
         entry = session.query(Task).filter(
-            (Task.crawling_session == crawling_session) &
-            (Task.page == None)
+            and_(
+                Task.job == job,
+                Task.page.is_(None)
+            )
         ).order_by(
             desc(Task.timestamp)
         ).limit(1).first()
@@ -296,18 +299,20 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
             cls,
             session: Session,
             *,
-            crawling_session: CrawlingSession,
+            job: Job,
     ) -> int:
         sub_query = session.query(Task).with_entities(
             Task.url_id
         ).where(
-            Task.crawling_session == crawling_session
+            Task.job == job
         )
 
         task_with_page_iter = session.query(Task).where(
-            Task.url_id.in_(sub_query) &
-            (Task.crawling_session == crawling_session) &
-            (Task.page_id != None)
+            and_(
+                Task.url_id.in_(sub_query),
+                Task.job == job,
+                Task.page_id.is_not(None)
+            )
         )
 
         lookup_to_page = {}
@@ -319,9 +324,11 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
             return 0
 
         row_count = session.query(Task).filter(
-            (Task.crawling_session == crawling_session) &
-            (Task.page == None) &
-            (Task.url_id.in_(lookup_to_page.keys()))
+            and_(
+                Task.job == job,
+                Task.page.is_(None),
+                Task.url_id.in_(lookup_to_page.keys())
+            )
         ).update({
             Task.page_id: case(
                 lookup_to_page,
@@ -337,10 +344,10 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
             cls,
             session: Session,
             *,
-            crawling_session: Union[CrawlingSession, int],
+            job: Union[Job, int],
     ):
         query = session.query(cls).where(
-            cls.session_id == int(crawling_session)
+            cls.job_id == int(job)
         )
 
         return query
@@ -350,12 +357,12 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
             cls,
             session: Session,
             *,
-            crawling_session: Union[CrawlingSession, int]
+            job: Union[Job, int]
     ) -> Iterable['Task']:
         back_lookup = aliased(Lookup)
 
         query = session.query(Task).where(
-            Task.session_id == int(crawling_session)
+            Task.job_id == int(job)
         ).join(
             back_lookup,
             back_lookup.id == Task.back_url_id
@@ -375,77 +382,17 @@ class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
         back_task = aliased(cls)
 
         query = session.query(cls).where(
-            cls.crawling_session == base_task.crawling_session
+            cls.job == base_task.job
         ).join(
             back_task,
             back_task.url_id == cls.back_url_id
         ).where(
             back_task.id == base_task.id
         ).where(
-            back_task.crawling_session == base_task.crawling_session
+            back_task.job == base_task.job
         )
 
         yield from query
-        # current_task = aliased(cls)
-        # next_task = aliased(cls)
-        #
-        # current_tasks = current_task.session_query(crawling_session)
-        #
-        # current_lookup = aliased(Lookup)
-        # next_lookup = aliased(Lookup)
-        #
-        # session.query(current_tasks).join(
-        #     cls,
-        #     current_tasks.url_id == current_tasks.
-        # )
-
-    # # TODO: unify session and session_id of all the functions in this class
-    # # TODO: remove unnecessary params
-    # @classmethod
-    # def query_joined(
-    #         cls,
-    #         session: Session,
-    #         *,
-    #         crawling_session: Union[CrawlingSession, int],
-    #         entities: list[str] = None,
-    #         target_mapper_name: str = None,
-    #         return_aliases: bool = False
-    # ) -> Union[Query, tuple[Query, dict]]:
-    #     lookup = aliased(Lookup)
-    #     back_lookup = aliased(Lookup)
-    #     aliases = dict(lookup=lookup, back_lookup=back_lookup)
-    #
-    #     if entities is None:
-    #         query = session.query(Task)
-    #     else:
-    #         query = session.query(*map(eval, entities))
-    #
-    #     query = query.filter(
-    #         Task.session_id == int(crawling_session)
-    #     ).join(
-    #         aliases['lookup'],
-    #         Task.url_id == aliases['lookup'].id
-    #     ).join(
-    #         aliases['back_lookup'],
-    #         Task.back_url_id == aliases['back_lookup'].id
-    #     ).join(
-    #         PageContent,
-    #         Task.page_id == PageContent.id
-    #     ).where(
-    #         PageContent.content.is_not(None)
-    #     ).group_by(
-    #         aliases['lookup'].id
-    #     )
-    #
-    #     if target_mapper_name:
-    #         query = query.where(
-    #             aliases['lookup'].mapper_name == target_mapper_name
-    #         )
-    #
-    #     if return_aliases:
-    #         return query, aliases
-    #     else:
-    #         return query
 
 
 # TODO: Before working on the following TODO, investigate duplications of content hash on the table.
@@ -476,19 +423,23 @@ class PageContent(SQLDataModelMixin, SQLCrawlerDataModelBase):
 def info_dict(
         session: Session,
         *,
-        crawling_session: CrawlingSession
+        job: Job
 ) -> dict[str, object]:
     # noinspection PyPep8
     return {
         'unfinished_task_count':
             session.query(func.count(Task.id)).filter(
-                (Task.page_id == None) &
-                (Task.crawling_session == crawling_session)
+                and_(
+                    Task.page_id.is_(None),
+                    Task.job == job
+                )
             ).scalar(),
         'finished_task_count':
             session.query(func.count(Task.id)).filter(
-                (Task.page_id != None) &
-                (Task.crawling_session == crawling_session)
+                and_(
+                    Task.page_id.is_not(None),
+                    Task.job == job
+                )
             ).scalar(),
         'whole_page_count':
             session.query(func.count(PageContent.id)).scalar(),

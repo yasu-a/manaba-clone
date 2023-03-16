@@ -3,11 +3,11 @@ from unittest import TestCase
 from sqlalchemy.orm import aliased
 
 import app_logging
-import crawl
 import model.crawl
 import opener
 from generate_html import create_test_case, TestCaseGenerationFailureError
 from sessctx import SessionContext
+from worker import crawl
 
 # TODO: organize code
 
@@ -57,7 +57,7 @@ class TestOpenerBasedCrawler(TestCase):
             )
 
             if create_new_session:
-                manaba_crawler.initialize(
+                manaba_crawler.initialize_tasks(
                     initial_urls=['0.html']
                 )
 
@@ -90,7 +90,7 @@ setup_test()
 
 
 def fetch_answers(session):
-    crawling_session = model.crawl.CrawlingSession.get_session(
+    job = model.crawl.Job.get_job(
         session,
         state='finished',
         order='latest'
@@ -102,7 +102,7 @@ def fetch_answers(session):
     query = session.query(
         model.crawl.Task
     ).filter(
-        model.crawl.Task.session_id == crawling_session.id
+        model.crawl.Task.job_id == job.id
     ).join(
         lookup,
         model.crawl.Task.url_id == lookup.id

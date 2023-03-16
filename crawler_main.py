@@ -1,15 +1,15 @@
 import app_logging
 import cert
-import crawl
 import launch_cert_server
 import model.crawl
 import opener
 from sessctx import SessionContext
+from worker import crawl
 
 logger = app_logging.create_logger()
 
 COOKIE_FILE_PATH = 'cookie.txt'
-DATABASE_PATH = 'db/crawl.db'
+DATABASE_PATH = 'db/database.db'
 
 
 def main():
@@ -18,7 +18,7 @@ def main():
     logger.info('main')
     lcm = cert.SocketLoginCertManager(launch_cert_server.HOST, launch_cert_server.PORT)
 
-    create_new_session = input('new session [y/n] > ').lower() == 'y'
+    create_new_session = True  # input('new session [y/n] > ').lower() == 'y'
     logger.info(f'{create_new_session=}')
 
     with opener.ManabaURLOpener(
@@ -39,7 +39,7 @@ def main():
                 period=crawl.ManabaCrawler.PERIOD_ALL
             )
 
-        manaba_crawler.crawl(resume_state=manaba_crawler.RESUME_OLDEST)
+        manaba_crawler.crawl(resume_state=manaba_crawler.RESUME_LATEST)
 
 
 if __name__ == '__main__':

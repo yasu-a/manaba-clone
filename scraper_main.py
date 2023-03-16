@@ -1,13 +1,13 @@
 import app_logging
 import model.crawl
 import model.scrape
-import scrape
 from sessctx import SessionContext
+from worker import scrape
 
 logger = app_logging.create_logger()
 
 CRAWLING_DATABASE_PATH = 'db/crawl.db'
-SRAPEING_DATABASE_PATH = 'db/scrape.db'
+SCRAPING_DATABASE_PATH = 'db/scrape.db'
 
 crawler_session_context = SessionContext.create_instance(
     CRAWLING_DATABASE_PATH,
@@ -15,7 +15,7 @@ crawler_session_context = SessionContext.create_instance(
 )
 
 scraper_session_context = SessionContext.create_instance(
-    SRAPEING_DATABASE_PATH,
+    SCRAPING_DATABASE_PATH,
     model.scrape.SQLScraperDataModelBase
 )
 
@@ -28,7 +28,8 @@ def main():
         scraper_session_context=scraper_session_context
     )
 
-    crawling_session_id = mnb.set_active_crawling_session(
+    # noinspection PyUnusedLocal
+    job = mnb.set_active_job(
         state='finished',
         order='oldest'
     )

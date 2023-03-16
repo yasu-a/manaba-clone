@@ -1,6 +1,6 @@
 from pprint import pprint
 
-from sqlalchemy.orm import *
+from sqlalchemy.orm import aliased
 
 import app_logging
 import model.crawl
@@ -11,7 +11,7 @@ from testing_tools import *
 logger = app_logging.create_logger()
 
 CRAWLING_DATABASE_PATH = 'db/crawl.db'
-SRAPEING_DATABASE_PATH = 'db/scrape.db'
+SCRAPING_DATABASE_PATH = 'db/scrape.db'
 
 crawler_session_context = SessionContext.create_instance(
     CRAWLING_DATABASE_PATH,
@@ -19,7 +19,7 @@ crawler_session_context = SessionContext.create_instance(
 )
 
 scraper_session_context = SessionContext.create_instance(
-    SRAPEING_DATABASE_PATH,
+    SCRAPING_DATABASE_PATH,
     model.scrape.SQLScraperDataModelBase
 )
 
@@ -46,9 +46,9 @@ def test_2():
             next_task,
             base_task.url_id == next_task.back_url_id
         ).where(
-            base_task.session_id == 1
+            base_task.job_id == 1
         ).where(
-            next_task.session_id == 1
+            next_task.job_id == 1
         )
 
         print()
