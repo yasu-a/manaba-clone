@@ -6,7 +6,6 @@ import app_logging
 import model.crawl
 import opener
 from generate_html import create_test_case, TestCaseGenerationFailureError
-from sessctx import SessionContext
 from worker import crawl
 
 # TODO: organize code
@@ -43,10 +42,7 @@ class TestOpenerBasedCrawler(TestCase):
 
         create_new_session = True
 
-        session_context = SessionContext.create_instance(
-            ':memory:' if USE_MEMORY_DB else 'crawl_debug.db',
-            model.crawl.SQLCrawlerDataModelBase
-        )
+        session_context = model.create_session_context(':memory:' if USE_MEMORY_DB else None)
 
         with opener.MemoryURLOpener(
                 files=files

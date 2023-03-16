@@ -16,12 +16,12 @@ class ManabaGroupHandlerImpl:
     ):
         # noinspection PyUnusedLocal
         @group_handler(group_name=group_name)
-        def impl(self, *, task_entry: model.crawl.Task, scraper_session: Session) -> bool:
+        def impl(self, *, task_entry: model.crawl.Task, session: Session) -> bool:
             if ignore:
                 return False
 
             result = scraper_model_class.insert_from_task_entry(
-                scraper_session,
+                session,
                 task_entry=task_entry
             )
             assert isinstance(result, bool)
@@ -65,13 +65,11 @@ class ManabaGroupHandlerImpl:
 class ManabaScraper(GroupHandlerMixin, ManabaGroupHandlerImpl):
     def __init__(
             self,
-            crawler_session_context: SessionContext,
-            scraper_session_context: SessionContext
+            session_context: SessionContext,
     ):
         super().__init__()
 
-        self.__crawler_sc = crawler_session_context
-        self.__scraper_sc = scraper_session_context
+        self.__sc = session_context
 
         self.__active_job_id = None
 
@@ -80,7 +78,7 @@ class ManabaScraper(GroupHandlerMixin, ManabaGroupHandlerImpl):
             state: Literal['finished', 'unfinished'],
             order: Literal['latest', 'oldest']
     ) -> int:
-        with self.__crawler_sc() as session:
+        with self.__sc() as session:
             job = model.crawl.Job.get_job(
                 session=session,
                 state=state,
@@ -89,23 +87,20 @@ class ManabaScraper(GroupHandlerMixin, ManabaGroupHandlerImpl):
             self.__active_job_id = job.id
         return self.__active_job_id
 
-    def scrape(self, crawler_session: Session, scraper_session: Session,
-               task_entry: model.crawl.Task):
-        handled = self.handle_by_group_name(task_entry, scraper_session)
+    def scrape(self, session: Session, task_entry: model.crawl.Task):
+        handled = self.handle_by_group_name(task_entry, session)
 
         if handled:
             for next_task_entry in model.crawl.Task.iter_next(
-                    crawler_session,
+                    session,
                     base_task=task_entry
             ):
-                self.scrape(crawler_session, scraper_session, next_task_entry)
+                self.scrape(session, next_task_entry)
 
     def scrape_all(self):
-        crawler_sessctx = self.__crawler_sc(do_commit=False)
-        scraper_sessctx = self.__scraper_sc()
-        with crawler_sessctx as crawler_session, scraper_sessctx as scraper_session:
+        with self.__sc() as session:
             for root_task in model.crawl.Task.iter_roots(
-                    crawler_session,
+                    session,
                     job=self.__active_job_id
             ):
-                self.scrape(crawler_session, scraper_session, root_task)
+                self.scrape(session, root_task)

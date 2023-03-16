@@ -31,14 +31,14 @@ class GroupHandlerMixin:
             if param['group_name'] == group_name:
                 return obj
 
-    def handle_by_group_name(self, task_entry: model.crawl.Task, scraper_session: Session) -> bool:
+    def handle_by_group_name(self, task_entry: model.crawl.Task, session: Session) -> bool:
         group_name = task_entry.lookup.group_name
         handler = self.__find_group_handler(group_name)
         if handler:
             self.logger.debug(f'ACCEPTED HANDLING {group_name}')
             handler_kwargs = dict(
                 task_entry=task_entry,
-                scraper_session=scraper_session
+                session=session
             )
             return handler(**handler_kwargs)
         else:

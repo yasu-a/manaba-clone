@@ -1,8 +1,9 @@
 import datetime
 import re
-from typing import Iterable, TypeVar, Type, Optional, Callable
+from typing import Iterable, Optional, Callable
 
 from sqlalchemy import inspect as sqlalchemy_inspect, exists
+from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.declarative import declared_attr
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import DetachedInstanceError
@@ -10,9 +11,9 @@ from sqlalchemy.orm.exc import DetachedInstanceError
 import app_logging
 from persistent_hash import persistent_hash
 
-T = TypeVar('T')
+SQLDataModelBase = declarative_base()
 
-__all__ = 'SQLDataModelMixin', 'create_timestamp', 'create_model_parameters'
+__all__ = 'SQLDataModelBase', 'SQLDataModelMixin', 'create_timestamp', 'create_model_parameters'
 
 
 # TODO: define abstract model base
@@ -107,11 +108,11 @@ class SQLDataModelMixin:
 
     @classmethod
     def _get_one(
-            cls: Type[T],
+            cls,
             session: Session,
             *,
             data: dict[str, object]
-    ) -> Optional[T]:
+    ) -> Optional['SQLDataModelMixin']:
         logger_msg = [f'get_one: ', f' {data=!r}']
 
         def predicate():
@@ -142,12 +143,12 @@ class SQLDataModelMixin:
 
     @classmethod
     def _add_if_not_exists(
-            cls: Type[T],
+            cls,
             session: Session,
             *,
             data: dict[str, object],
             unique_keys: list[str] = None
-    ) -> Optional[T]:
+    ) -> Optional['SQLDataModelMixin']:
         unique_keys = unique_keys or list(data.keys())
 
         predicate = cls._filter_predicate(

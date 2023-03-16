@@ -3,30 +3,19 @@ from pprint import pprint
 from sqlalchemy.orm import aliased
 
 import app_logging
+import model
 import model.crawl
 import model.scrape
-from sessctx import SessionContext
 from testing_tools import *
 
 logger = app_logging.create_logger()
 
-CRAWLING_DATABASE_PATH = 'db/crawl.db'
-SCRAPING_DATABASE_PATH = 'db/scrape.db'
-
-crawler_session_context = SessionContext.create_instance(
-    CRAWLING_DATABASE_PATH,
-    model.crawl.SQLCrawlerDataModelBase
-)
-
-scraper_session_context = SessionContext.create_instance(
-    SCRAPING_DATABASE_PATH,
-    model.scrape.SQLScraperDataModelBase
-)
+session_context = model.create_session_context()
 
 
 @test(enabled=True)
 def test_1():
-    with crawler_session_context(do_commit=False) as session:
+    with session_context(do_commit=False) as session:
         query = session.query(model.crawl.Task)
         print()
         print(query)
@@ -38,7 +27,7 @@ def test_1():
 
 @test(enabled=True)
 def test_2():
-    with crawler_session_context(do_commit=False) as session:
+    with session_context(do_commit=False) as session:
         base_task = aliased(model.crawl.Task)
         next_task = aliased(model.crawl.Task)
 
