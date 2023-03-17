@@ -21,7 +21,8 @@ def main():
     logger.info(f'{create_new_session=}')
 
     with opener.ManabaURLOpener(
-            cookie_file_name=COOKIE_FILE_PATH
+            cookie_file_name=COOKIE_FILE_PATH,
+            rate_limiter=opener.URLRateLimiter(sleep=2)
     ) as url_opener:
         url_opener.login(lcm)
 
