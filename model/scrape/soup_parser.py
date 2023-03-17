@@ -1,5 +1,4 @@
 from functools import cached_property
-from functools import cached_property
 from typing import Any
 
 import bs4

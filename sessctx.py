@@ -33,7 +33,13 @@ class SessionContext:
         session: Session = self.__session_class()
         session_index = hashlib.sha3_256(str(session).encode('utf-8')).hexdigest()[-8:]
         session_index = f'0x{session_index.upper()}'
-        self.logger.debug(f'session {self.__name} {session_index} CREATED')
+        do_commit_final = self.__eval_prioritized_values(
+            [do_commit, self.__do_commit],
+            default=True
+        )
+        self.logger.debug(
+            f'session {self.__name} {session_index} do_commit={do_commit_final} CREATED'
+        )
         try:
             yield session
         except Exception as e:
@@ -41,10 +47,6 @@ class SessionContext:
             self.logger.debug(f'session {self.__name} {session_index} ROLLED BACK due to {e}')
             raise
         else:
-            do_commit_final = self.__eval_prioritized_values(
-                [do_commit, self.__do_commit],
-                default=True
-            )
             if do_commit_final:
                 session.commit()
                 self.logger.debug(f'session {self.__name} {session_index} COMMITTED')
@@ -62,5 +64,5 @@ class SessionContext:
     @classmethod
     def create_instance(cls, db_path: str, base, **kwargs):
         SessionClass = cls.create_session_class(db_path, base)
-        cls.logger.info(f'session context created: {db_path=}, {base=}')
+        cls.logger.info(f'session context created: {db_path=}, {base=}, {kwargs=}')
         return cls(SessionClass, name=db_path, **kwargs)
