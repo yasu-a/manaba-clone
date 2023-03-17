@@ -1,11 +1,12 @@
 from pprint import pformat
-from typing import Callable
+from typing import Callable, Optional
 
 from sqlalchemy.orm import Session
 
 import app_logging
 import model.crawl
 import model.scrape
+import model.scrape.base
 
 
 def group_handler(*, group_name: str):
@@ -22,7 +23,8 @@ class GroupHandlerMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def __find_group_handler(self, group_name: str) -> Callable[..., bool]:
+    def __find_group_handler(self, group_name: str) \
+            -> Callable[..., Optional[model.scrape.base.SQLScraperModelBase]]:
         for name in dir(self):
             obj = getattr(self, name)
             param = getattr(obj, '_group_handler', None)
@@ -31,7 +33,13 @@ class GroupHandlerMixin:
             if param['group_name'] == group_name:
                 return obj
 
-    def handle_by_group_name(self, task_entry: model.crawl.Task, session: Session) -> bool:
+    def handle_by_group_name(
+            self,
+            *,
+            session: Session,
+            task_entry: model.crawl.Task,
+            parent_model_entries: model.scrape.base.ParentModelEntries
+    ) -> Optional[model.scrape.base.SQLScraperModelBase]:
         group_name = task_entry.lookup.group_name
 
         def print_log(state):
@@ -43,9 +51,10 @@ class GroupHandlerMixin:
             print_log('ACCEPTED')
             handler_kwargs = dict(
                 task_entry=task_entry,
-                session=session
+                session=session,
+                parent_model_entries=parent_model_entries
             )
             return handler(**handler_kwargs)
         else:
             print_log('IGNORED')
-            return False
+            return None

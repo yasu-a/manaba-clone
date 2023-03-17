@@ -48,5 +48,18 @@ def test_2():
         print(query.count())
 
 
+@test(enabled=True)
+def test_3():
+    with session_context(do_commit=False) as session:
+        query = session.query(model.scrape.Course)
+
+        print()
+        print(query)
+        print()
+        for r in query.limit(10).all():
+            pprint(r.as_dict())
+        print(query.count())
+
+
 if __name__ == '__main__':
     run_tests(list(globals().items()), run_last_only=True)

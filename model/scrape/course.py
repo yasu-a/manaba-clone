@@ -1,13 +1,13 @@
 import re
-from typing import Iterable, Optional, Any
+from typing import Iterable
 
 from sqlalchemy import ForeignKey
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy.orm import relationship
 from sqlalchemy.schema import Column
 from sqlalchemy.types import INTEGER, TEXT, DATETIME
 
 import model.crawl
-from .base import SQLScraperModelBase
+from .base import SQLScraperModelBase, ParentModelEntries
 from .soup_parser import SoupParser
 
 
@@ -18,15 +18,23 @@ class CourseInstructor(SQLScraperModelBase):
     name = Column(TEXT)
 
     @classmethod
-    def list_entries_from_string(
-            cls,
+    def _soup_parser(cls) -> type[SoupParser]:
+        raise NotImplementedError()
+
+    @classmethod
+    def _create_entry_from_task_entry(
+            cls: type['SQLScraperModelBase'],
             *,
-            string: str,
-    ) -> Iterable['CourseInstructor']:
-        return [
-            CourseInstructor(**field)
-            for field in cls.iter_fields_from_string(string=string)
-        ]
+            task_entry: model.crawl.Task,
+            soup_parser: SoupParser
+    ) -> 'SQLScraperModelBase':
+        raise NotImplementedError()
+
+    def _set_parent_model_entry(
+            self,
+            parent_model_entries: ParentModelEntries
+    ):
+        raise NotImplementedError()
 
     @classmethod
     def iter_fields_from_string(cls, string: str) -> Iterable[dict]:
@@ -42,6 +50,17 @@ class CourseInstructor(SQLScraperModelBase):
                 name=part
             )
 
+    @classmethod
+    def list_entries_from_string(
+            cls,
+            *,
+            string: str,
+    ) -> Iterable['CourseInstructor']:
+        return [
+            CourseInstructor(**field)
+            for field in cls.iter_fields_from_string(string=string)
+        ]
+
 
 class CourseSchedule(SQLScraperModelBase):
     id = Column(INTEGER, primary_key=True)
@@ -53,6 +72,25 @@ class CourseSchedule(SQLScraperModelBase):
     period = Column(INTEGER)
 
     YEAR_NONE = 1111
+
+    @classmethod
+    def _soup_parser(cls) -> type[SoupParser]:
+        raise NotImplementedError()
+
+    @classmethod
+    def _create_entry_from_task_entry(
+            cls: type['SQLScraperModelBase'],
+            *,
+            task_entry: model.crawl.Task,
+            soup_parser: SoupParser
+    ) -> 'SQLScraperModelBase':
+        raise NotImplementedError()
+
+    def _set_parent_model_entry(
+            self,
+            parent_model_entries: ParentModelEntries
+    ):
+        raise NotImplementedError()
 
     @classmethod
     def list_entries_from_string(
@@ -136,51 +174,28 @@ class Course(SQLScraperModelBase):
     schedules = relationship('CourseSchedule', backref='course', lazy="joined")
     instructors = relationship('CourseInstructor', backref='course', lazy="joined")
 
-    # course_news = relationship('CourseNews', backref='course', lazy="joined")
-    # course_contents = relationship('CourseContents', backref='course', lazy="joined")
+    contents_page_list_entries = relationship(
+        'CourseContentsPageList',
+        backref='course',
+        lazy='joined'
+    )
+    news_entries = relationship(
+        'CourseNews',
+        backref='course',
+        lazy='joined'
+    )
 
     @classmethod
-    def find_duplication(
-            cls,
-            session: Session,
-            *,
-            values: dict[str, Any]
-    ):
-        query = session.query(cls)
-        for name, value in values.items():
-            attribute = getattr(cls, name)
-            query = query.where(attribute == value)
-        duplicated_entry: Optional[cls] = query.first()
-        return duplicated_entry
+    def _soup_parser(cls) -> type[SoupParser]:
+        return CourseSoupParser
 
     @classmethod
-    def exists(
-            cls,
-            session: Session,
+    def _create_entry_from_task_entry(
+            cls: type['SQLScraperModelBase'],
             *,
-            task_entry: model.crawl.Task
-    ) -> bool:
-        dup_entry = cls.find_duplication(
-            session,
-            values=dict(
-                timestamp=task_entry.timestamp,
-                url=task_entry.lookup.url
-            )
-        )
-
-        return dup_entry is not None
-
-    @classmethod
-    def from_task_entry(
-            cls,
-            *,
-            task_entry: model.crawl.Task
-    ) -> Optional['Course']:
-        if task_entry.page is None:
-            return None
-
-        soup_parser = CourseSoupParser.from_html(task_entry.page.content)
-
+            task_entry: model.crawl.Task,
+            soup_parser: SoupParser
+    ) -> 'SQLScraperModelBase':
         entry = cls(
             timestamp=task_entry.timestamp,
             url=task_entry.lookup.url,
@@ -189,24 +204,8 @@ class Course(SQLScraperModelBase):
 
         return entry
 
-    @classmethod
-    def insert_from_task_entry(
-            cls,
-            session: Session,
-            *,
-            task_entry: model.crawl.Task
-    ) -> bool:
-        entry_exists = cls.exists(
-            session,
-            task_entry=task_entry
-        )
-        if entry_exists:
-            return False
-
-        entry = cls.from_task_entry(
-            task_entry=task_entry
-        )
-
-        session.add(entry)
-
-        return True
+    def _set_parent_model_entry(
+            self,
+            parent_model_entries: ParentModelEntries
+    ):
+        pass

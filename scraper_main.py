@@ -14,6 +14,7 @@ def main():
 
     mnb = scrape.ManabaScraper(
         session_context=session_context,
+        max_process_count=300
     )
 
     # noinspection PyUnusedLocal
@@ -22,6 +23,7 @@ def main():
         order='oldest'
     )
 
+    mnb.reset_database()
     mnb.scrape_all()
 
 

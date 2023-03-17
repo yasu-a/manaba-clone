@@ -7,17 +7,17 @@ from .base import SQLScraperModelBase, ParentModelEntries
 from .soup_parser import SoupParser
 
 
-class CourseContentsPageSoupParser(SoupParser):
+class CourseNewsSoupParser(SoupParser):
     @property
     def title(self):
-        elm = self._soup.select_one('.contentbody-left > h1')
+        elm = self._soup.select_one('h2.msg-subject')
         if elm is None:
             return None
         return elm.text.strip()
 
     @property
     def body(self):
-        elm = self._soup.select_one('.contentbody-left')
+        elm = self._soup.select_one('.msg-text')
         if elm is None:
             return None
         inner_html \
@@ -25,10 +25,10 @@ class CourseContentsPageSoupParser(SoupParser):
         return inner_html
 
 
-class CourseContentsPage(SQLScraperModelBase):
+class CourseNews(SQLScraperModelBase):
     id = Column(INTEGER, primary_key=True)
 
-    contents_page_list_id = Column(INTEGER, ForeignKey('course_contents_page_list.id'))
+    course_id = Column(INTEGER, ForeignKey('course.id'))
     timestamp = Column(DATETIME)
     url = Column(TEXT)
 
@@ -37,7 +37,7 @@ class CourseContentsPage(SQLScraperModelBase):
 
     @classmethod
     def _soup_parser(cls) -> type[SoupParser]:
-        return CourseContentsPageSoupParser
+        return CourseNewsSoupParser
 
     @classmethod
     def _create_entry_from_task_entry(
@@ -57,4 +57,4 @@ class CourseContentsPage(SQLScraperModelBase):
             self,
             parent_model_entries: ParentModelEntries
     ):
-        self.contents_page_list_id = parent_model_entries['CourseContentsPageList'].id
+        self.course_id = parent_model_entries['Course'].id

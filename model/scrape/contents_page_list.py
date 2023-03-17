@@ -1,15 +1,13 @@
 import re
-from typing import Optional, Any
 
 import dateutil.parser
 from sqlalchemy import ForeignKey
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy.orm import relationship
 from sqlalchemy.schema import Column
 from sqlalchemy.types import INTEGER, TEXT, DATETIME
 
 import model.crawl
-from .base import SQLScraperModelBase
-from .course import Course
+from .base import SQLScraperModelBase, ParentModelEntries
 from .soup_parser import SoupParser
 
 
@@ -42,51 +40,22 @@ class CourseContentsPageList(SQLScraperModelBase):
     title = Column(TEXT)
     release_date = Column(DATETIME)
 
-    contents_pages = relationship(
+    contents_page_entries = relationship(
         'CourseContentsPage',
         backref='course_contents_page_list',
-        lazy="joined"
+        lazy='joined'
     )
 
     @classmethod
-    def find_duplication(
-            cls,
-            session: Session,
-            *,
-            values: dict[str, Any]
-    ):
-        query = session.query(cls)
-        for name, value in values.items():
-            attribute = getattr(cls, name)
-            query = query.where(attribute == value)
-        duplicated_entry: Optional[cls] = query.first()
-        return duplicated_entry
+    def _soup_parser(cls) -> type[SoupParser]:
+        return CourseContentsPageListSoupParser
 
     @classmethod
-    def exists(
-            cls,
-            session: Session,
-            *,
-            task_entry: model.crawl.Task
-    ) -> bool:
-        dup_entry = cls.find_duplication(
-            session,
-            values=dict(
-                timestamp=task_entry.timestamp,
-                url=task_entry.lookup.url
-            )
-        )
-
-        return dup_entry is not None
-
-    @classmethod
-    def from_task_entry(
-            cls,
-            *,
-            task_entry: model.crawl.Task
-    ) -> 'Course':
-        soup_parser = CourseContentsPageListSoupParser.from_html(task_entry.page.content)
-
+    def _create_entry_from_task_entry(
+            cls: type['SQLScraperModelBase'], *,
+            task_entry: model.crawl.Task,
+            soup_parser: SoupParser
+    ) -> 'SQLScraperModelBase':
         entry = cls(
             timestamp=task_entry.timestamp,
             url=task_entry.lookup.url,
@@ -95,24 +64,9 @@ class CourseContentsPageList(SQLScraperModelBase):
 
         return entry
 
-    @classmethod
-    def insert_from_task_entry(
-            cls,
-            session: Session,
-            *,
-            task_entry: model.crawl.Task
-    ) -> bool:
-        entry_exists = cls.exists(
-            session,
-            task_entry=task_entry
-        )
-        if entry_exists:
-            return False
-
-        entry = cls.from_task_entry(
-            task_entry=task_entry
-        )
-
-        session.add(entry)
-
-        return True
+    def _set_parent_model_entry(
+            self,
+            parent_model_entries: ParentModelEntries
+    ):
+        # TODO: move attribute `id` in every scraper models to SQLScraperModelBase
+        self.course_id = parent_model_entries['Course'].id
