@@ -43,7 +43,7 @@ class CookieURLOpenHandler(URLOpenHandlerBase):
     ):
         super().__init__(**kwargs)
 
-        self.__rate_limiter = rate_limiter or URLRateLimiter()
+        self.__rate_limiter = rate_limiter
 
         self.__cookie_jar = http.cookiejar.LWPCookieJar(filename=cookie_file_name)
         self.__opener = urllib.request.build_opener(
