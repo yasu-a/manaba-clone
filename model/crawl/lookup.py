@@ -2,13 +2,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy.schema import Column, Index
 from sqlalchemy.types import INTEGER, TEXT
 
-from model import SQLDataModelMixin, SQLDataModelBase
 from worker.crawl.page_family import GroupedURL
+from .base import SQLCrawlerModelBase
 from .common import string_hash_63
 
 
 # noinspection PyShadowingBuiltins
-class Lookup(SQLDataModelMixin, SQLDataModelBase):
+class Lookup(SQLCrawlerModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
     url = Column(TEXT, unique=True)
     group_name = Column(TEXT)

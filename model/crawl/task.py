@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session, relationship, aliased
 from sqlalchemy.schema import Column
 from sqlalchemy.types import INTEGER, DATETIME
 
-from model import SQLDataModelMixin, SQLDataModelBase, create_timestamp
+from model import create_timestamp
 from worker.crawl.page_family import GroupedURL
+from .base import SQLCrawlerModelBase
 from .lookup import Lookup
 from .page import PageContent
 
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
 
 
 # noinspection PyPep8
-class Task(SQLDataModelMixin, SQLDataModelBase):
+class Task(SQLCrawlerModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
 
     job_id = Column(INTEGER, ForeignKey('job.id'), nullable=False)

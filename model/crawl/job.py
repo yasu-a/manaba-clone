@@ -5,12 +5,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy.schema import Column
 from sqlalchemy.types import INTEGER, DATETIME
 
-from model import SQLDataModelMixin, SQLDataModelBase, create_timestamp
+from model import create_timestamp
+from .base import SQLCrawlerModelBase
 from .task import Task
 
 
 # TODO: adding index on timestamp may improve 'get_resumed_session'???
-class Job(SQLDataModelMixin, SQLDataModelBase):
+class Job(SQLCrawlerModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
     timestamp = Column(DATETIME)
 

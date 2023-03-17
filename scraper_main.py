@@ -19,7 +19,7 @@ def main():
     # noinspection PyUnusedLocal
     job = mnb.set_active_job(
         state='finished',
-        order='latest'
+        order='oldest'
     )
 
     mnb.scrape_all()

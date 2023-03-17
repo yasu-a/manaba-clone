@@ -7,11 +7,11 @@ from sqlalchemy.schema import Column
 from sqlalchemy.types import INTEGER, TEXT, DATETIME
 
 import model.crawl
-from model import SQLDataModelMixin, SQLDataModelBase
+from .base import SQLScraperModelBase
 from .soup_parser import SoupParser
 
 
-class CourseInstructor(SQLDataModelMixin, SQLDataModelBase):
+class CourseInstructor(SQLScraperModelBase):
     id = Column(INTEGER, primary_key=True)
 
     course_id = Column(INTEGER, ForeignKey('course.id'))
@@ -43,7 +43,7 @@ class CourseInstructor(SQLDataModelMixin, SQLDataModelBase):
             )
 
 
-class CourseSchedule(SQLDataModelMixin, SQLDataModelBase):
+class CourseSchedule(SQLScraperModelBase):
     id = Column(INTEGER, primary_key=True)
 
     course_id = Column(INTEGER, ForeignKey('course.id'))
@@ -125,7 +125,7 @@ class CourseSoupParser(SoupParser):
         return CourseInstructor.list_entries_from_string(string=string)
 
 
-class Course(SQLDataModelMixin, SQLDataModelBase):
+class Course(SQLScraperModelBase):
     id = Column(INTEGER, primary_key=True)
 
     url = Column(TEXT)

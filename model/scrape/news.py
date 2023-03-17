@@ -1,20 +1,15 @@
-from typing import Type, TypeVar
-
 from sqlalchemy import ForeignKey, desc
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import Column
 from sqlalchemy.types import INTEGER, TEXT, DATETIME
 
-from model import SQLDataModelBase, SQLDataModelMixin, create_model_parameters
+from model import create_model_parameters
 from persistent_hash import persistent_hash
+from .base import SQLScraperModelBase
 from .course import Course
 
-T = TypeVar('T')
 
-__all__ = 'CourseNews',
-
-
-class CourseNews(SQLDataModelMixin, SQLDataModelBase):
+class CourseNews(SQLScraperModelBase):
     course_id = Column(INTEGER, ForeignKey('course.id'))
     timestamp = Column(DATETIME)
     hash = Column(INTEGER)
@@ -41,8 +36,7 @@ class CourseNews(SQLDataModelMixin, SQLDataModelBase):
         return course_news_with_same_hash
 
     @classmethod
-    def insert(cls: Type[T], session: Session, field: dict, *, course: Course) \
-            -> T:
+    def insert(cls, session: Session, field: dict, *, course: Course):
         assert isinstance(field, dict)
         assert set(field.keys()) == cls.FIELD_NAMES
 

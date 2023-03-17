@@ -4,14 +4,15 @@ from sqlalchemy.orm import Session
 from sqlalchemy.schema import Column
 from sqlalchemy.types import INTEGER, DATETIME, UnicodeText
 
-from model import SQLDataModelMixin, SQLDataModelBase, create_timestamp
+from model import create_timestamp
+from .base import SQLCrawlerModelBase
 from .common import string_hash_63
 
 
 # TODO: Before working on the following TODO, investigate duplications of content hash on the table.
 # TODO: Change mapping into content_hash -> content; store timestamp on Task, not on this table.
 #       This change can reduce the size of database.
-class PageContent(SQLDataModelMixin, SQLDataModelBase):
+class PageContent(SQLCrawlerModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
     timestamp = Column(DATETIME, nullable=False)
     content = Column(UnicodeText)

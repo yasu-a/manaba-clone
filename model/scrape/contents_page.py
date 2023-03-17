@@ -6,7 +6,7 @@ from sqlalchemy.schema import Column
 from sqlalchemy.types import INTEGER, TEXT, DATETIME, UnicodeText
 
 import model.crawl
-from model import SQLDataModelMixin, SQLDataModelBase
+from .base import SQLScraperModelBase
 from .course import Course
 from .soup_parser import SoupParser
 
@@ -29,7 +29,7 @@ class CourseContentsPageSoupParser(SoupParser):
         return inner_html
 
 
-class CourseContentsPage(SQLDataModelMixin, SQLDataModelBase):
+class CourseContentsPage(SQLScraperModelBase):
     id = Column(INTEGER, primary_key=True)
 
     contents_page_list_id = Column(INTEGER, ForeignKey('course_contents_page_list.id'))
