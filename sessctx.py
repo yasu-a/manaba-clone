@@ -11,7 +11,6 @@ from sqlalchemy.orm import sessionmaker
 import app_logging
 
 
-# TODO: abstract duplication
 class SessionContext:
     logger = app_logging.create_logger()
 

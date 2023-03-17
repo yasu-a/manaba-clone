@@ -112,7 +112,6 @@ class ManabaScraper(GroupHandlerMixin, ManabaGroupHandlerImpl):
             task_entry: model.crawl.Task,
             parent_model_entries: model.scrape.base.ParentModelEntries
     ):
-        # TODO: remove handler's return values
         current_model_entry = self.handle_by_group_name(
             session=session,
             task_entry=task_entry,

@@ -85,7 +85,6 @@ class SQLDataModelTableNameMixin:
         return cls.__camel_to_snake(cls.__name__)
 
 
-# TODO: define abstract model base
 class SQLDataModelMixin(
     SQLDataModelRepresentativeMixin,
     SQLDataModelTableNameMixin
