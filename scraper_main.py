@@ -8,7 +8,9 @@ session_context = model.create_session_context()
 
 
 def main():
-    logger.info('main')
+    app_logging.set_level(app_logging.INFO)
+
+    logger.info('scraper main')
 
     mnb = scrape.ManabaScraper(
         session_context=session_context,
@@ -16,8 +18,8 @@ def main():
 
     # noinspection PyUnusedLocal
     job = mnb.set_active_job(
-        state='unfinished',
-        order='oldest'
+        state='finished',
+        order='latest'
     )
 
     mnb.scrape_all()

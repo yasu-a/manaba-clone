@@ -12,13 +12,13 @@ from .group_handler import GroupHandlerMixin, group_handler
 class ManabaGroupHandlerImpl:
     @staticmethod
     def implement_group_handler(
-            group_name=None, scraper_model_class=None, /, *, ignore=False
+            group_name=None, scraper_model_class=None, /, *, ignore=False, return_value=False
     ):
         # noinspection PyUnusedLocal
         @group_handler(group_name=group_name)
         def impl(self, *, task_entry: model.crawl.Task, session: Session) -> bool:
             if ignore:
-                return False
+                return return_value
 
             result = scraper_model_class.insert_from_task_entry(
                 session,
@@ -34,7 +34,8 @@ class ManabaGroupHandlerImpl:
     #  -within-the-class-body
     course_list_handler = implement_group_handler.__func__(
         'course_list',
-        ignore=True
+        ignore=True,
+        return_value=True  # TDOO: need it?
     )
     course_handler = implement_group_handler.__func__(
         'course',
@@ -88,14 +89,14 @@ class ManabaScraper(GroupHandlerMixin, ManabaGroupHandlerImpl):
         return self.__active_job_id
 
     def scrape(self, session: Session, task_entry: model.crawl.Task):
-        handled = self.handle_by_group_name(task_entry, session)
+        # TODO: remove handler's return values
+        self.handle_by_group_name(task_entry, session)
 
-        if handled:
-            for next_task_entry in model.crawl.Task.iter_next(
-                    session,
-                    base_task=task_entry
-            ):
-                self.scrape(session, next_task_entry)
+        for next_task_entry in model.crawl.Task.iter_next(
+                session,
+                base_task=task_entry
+        ):
+            self.scrape(session, next_task_entry)
 
     def scrape_all(self):
         with self.__sc() as session:

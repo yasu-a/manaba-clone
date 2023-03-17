@@ -14,7 +14,7 @@ DATABASE_PATH = 'db/database.db'
 def main():
     app_logging.set_level(app_logging.DEBUG)
 
-    logger.info('main')
+    logger.info('crawler main')
     lcm = cert.SocketLoginCertManager(launch_cert_server.HOST, launch_cert_server.PORT)
 
     create_new_session = input('new session [y/n] > ').lower() == 'y'

@@ -33,14 +33,19 @@ class GroupHandlerMixin:
 
     def handle_by_group_name(self, task_entry: model.crawl.Task, session: Session) -> bool:
         group_name = task_entry.lookup.group_name
+
+        def print_log(state):
+            self.logger.info(f'{state} HANDLING {group_name}\n{task_entry.lookup.url}')
+            self.logger.debug(f'{pformat(task_entry.as_dict())=}')
+
         handler = self.__find_group_handler(group_name)
         if handler:
-            self.logger.debug(f'ACCEPTED HANDLING {group_name}')
+            print_log('ACCEPTED')
             handler_kwargs = dict(
                 task_entry=task_entry,
                 session=session
             )
             return handler(**handler_kwargs)
         else:
-            self.logger.warning(f'IGNORED HANDLING {group_name}\n{pformat(task_entry.as_dict())}')
+            print_log('IGNORED')
             return False

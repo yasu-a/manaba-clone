@@ -175,7 +175,10 @@ class Course(SQLDataModelMixin, SQLDataModelBase):
             cls,
             *,
             task_entry: model.crawl.Task
-    ) -> 'Course':
+    ) -> Optional['Course']:
+        if task_entry.page is None:
+            return None
+
         soup_parser = CourseSoupParser.from_html(task_entry.page.content)
 
         entry = cls(
