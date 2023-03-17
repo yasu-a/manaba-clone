@@ -1,4 +1,4 @@
-from .common import SQLDataModelMixin, SQLDataModelBase, create_timestamp, create_model_parameters
+from .common import SQLDataModelMixin, SQLDataModelBase, create_timestamp
 
 _DATABASE_PATH = 'db/database.db'
 
