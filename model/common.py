@@ -17,15 +17,7 @@ class SQLDataModelRepresentativeMixin:
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    @staticmethod
-    def __map_repr_value(value):
-        if isinstance(value, (str, bytes)):
-            if len(value) >= 128:
-                return f'<{type(value).__name__} of length {len(value)}>'
-        return value
-
-    def as_dict(self):
-        dct = {}
+    def iter_attributes(self):
         mapper = sqlalchemy_inspect(type(self))
         for k in mapper.attrs.keys():
             if not k.startswith('_'):
@@ -33,11 +25,40 @@ class SQLDataModelRepresentativeMixin:
                     attr = getattr(self, k)
                 except DetachedInstanceError:
                     attr = '<session not attached>'
-                if isinstance(attr, SQLDataModelRepresentativeMixin):
-                    attr = attr.as_dict()
+                yield k, attr
+
+    @staticmethod
+    def __map_repr_value(value):
+        if isinstance(value, (str, bytes)):
+            if len(value) >= 128:
+                value = f'<{type(value).__name__} of length {len(value)}>'
+        return value
+
+    def __as_dict(self, history=None):
+        history = history or tuple()
+        if self in history:
+            return '<described in ancestors>'
+        new_history = history + (self,)
+
+        dct = {}
+        for name, attr in self.iter_attributes():
+            if isinstance(attr, list):
+                lst = []
+                for sub_repr_obj in attr:
+                    sub_repr_obj = sub_repr_obj.__as_dict(history=new_history)
+                    lst.append(sub_repr_obj)
+                attr = lst
+            elif isinstance(attr, SQLDataModelRepresentativeMixin):
+                attr = attr.__as_dict(history=new_history)
+            else:
                 attr = self.__map_repr_value(attr)
-                dct[k] = attr
+            dct[name] = attr
+        dct['__name__'] = type(self).__name__
+
         return dct
+
+    def as_dict(self):
+        return self.__as_dict()
 
     def __repr__(self):
         mapper = sqlalchemy_inspect(type(self))
