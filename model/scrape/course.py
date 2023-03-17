@@ -1,34 +1,40 @@
 import re
-from typing import Iterable, Optional, Type, TypeVar
+from typing import Iterable
 
-from sqlalchemy import ForeignKey, desc
-from sqlalchemy.orm import Session, relationship
+from sqlalchemy import ForeignKey
+from sqlalchemy.orm import relationship
 from sqlalchemy.schema import Column
 from sqlalchemy.types import INTEGER, TEXT, DATETIME
 
-from model.common import *
-from persistent_hash import persistent_hash
-
-T = TypeVar('T')
-
-__all__ = 'CourseInstructor', 'CourseSchedule', 'Course'
+import model.crawl
+from .base import SQLScraperModelBase, ParentModelEntries
+from .soup_parser import SoupParser
 
 
-class CourseInstructor(SQLDataModelMixin, SQLDataModelBase):
+class CourseInstructor(SQLScraperModelBase):
+    id = Column(INTEGER, primary_key=True)
+
     course_id = Column(INTEGER, ForeignKey('course.id'))
     name = Column(TEXT)
 
-    FIELD_NAMES = {'name'}
+    @classmethod
+    def _soup_parser(cls) -> type[SoupParser]:
+        raise NotImplementedError()
 
     @classmethod
-    def insert(cls: Type[T], session: Session, field: dict, *, course: 'Course') \
-            -> Optional[T]:
-        assert isinstance(field, dict)
-        assert set(field.keys()) == cls.FIELD_NAMES
+    def _create_entry_from_task_entry(
+            cls: type['SQLScraperModelBase'],
+            *,
+            task_entry: model.crawl.Task,
+            soup_parser: SoupParser
+    ) -> 'SQLScraperModelBase':
+        raise NotImplementedError()
 
-        instructor = cls(**field, course=course)
-        session.add(instructor)
-        return instructor
+    def _set_parent_model_entry(
+            self,
+            parent_model_entries: ParentModelEntries
+    ):
+        raise NotImplementedError()
 
     @classmethod
     def iter_fields_from_string(cls, string: str) -> Iterable[dict]:
@@ -44,37 +50,72 @@ class CourseInstructor(SQLDataModelMixin, SQLDataModelBase):
                 name=part
             )
 
+    @classmethod
+    def list_entries_from_string(
+            cls,
+            *,
+            string: str,
+    ) -> Iterable['CourseInstructor']:
+        return [
+            CourseInstructor(**field)
+            for field in cls.iter_fields_from_string(string=string)
+        ]
 
-class CourseSchedule(SQLDataModelBase, SQLDataModelMixin):
+
+class CourseSchedule(SQLScraperModelBase):
+    id = Column(INTEGER, primary_key=True)
+
     course_id = Column(INTEGER, ForeignKey('course.id'))
     year = Column(INTEGER)
     semester = Column(INTEGER)
     weekday = Column(INTEGER)
     period = Column(INTEGER)
 
-    FIELD_NAMES = {'semester', 'weekday', 'period', 'year'}
-
     YEAR_NONE = 1111
 
     @classmethod
-    def insert(cls: Type[T], session: Session, field: dict, *, course: 'Course') \
-            -> Optional[T]:
-        assert isinstance(field, dict)
-        assert set(field.keys()) == cls.FIELD_NAMES
-
-        if field['year'] == cls.YEAR_NONE:
-            field['year'] = None
-
-        schedule = cls(**field, course=course)
-        session.add(schedule)
-        return schedule
+    def _soup_parser(cls) -> type[SoupParser]:
+        raise NotImplementedError()
 
     @classmethod
-    def iter_fields_from_string(cls, year: int, string: str) -> Iterable[dict]:
+    def _create_entry_from_task_entry(
+            cls: type['SQLScraperModelBase'],
+            *,
+            task_entry: model.crawl.Task,
+            soup_parser: SoupParser
+    ) -> 'SQLScraperModelBase':
+        raise NotImplementedError()
+
+    def _set_parent_model_entry(
+            self,
+            parent_model_entries: ParentModelEntries
+    ):
+        raise NotImplementedError()
+
+    @classmethod
+    def list_entries_from_string(
+            cls,
+            *,
+            string: str
+    ) -> Iterable['CourseSchedule']:
+        return [
+            CourseSchedule(**field)
+            for field in cls.iter_fields_from_string(string)
+        ]
+
+    @classmethod
+    def iter_fields_from_string(cls, string: str, *, year: str = None) -> Iterable[dict]:
         assert isinstance(string, str)
         string = string.strip()
 
         parts = re.findall(r'\S+', string)
+
+        if len(parts) != 0:
+            head, *rest = parts
+            if re.fullmatch(r'\d+', head):
+                assert year is None
+                year = int(head)
+                parts = rest
 
         if len(parts) != 0:
             head, *rest = parts
@@ -83,7 +124,7 @@ class CourseSchedule(SQLDataModelBase, SQLDataModelMixin):
                     ' '.join(['前期', *rest]),
                     ' '.join(['後期', *rest])
                 ]:
-                    yield from cls.iter_fields_from_string(year, new_string)
+                    yield from cls.iter_fields_from_string(new_string, year=year)
             else:
                 assert len(head) == 2
                 head_first, head_second = head
@@ -104,63 +145,67 @@ class CourseSchedule(SQLDataModelBase, SQLDataModelMixin):
                     )
 
 
-class Course(SQLDataModelBase, SQLDataModelMixin):
+class CourseSoupParser(SoupParser):
+    @property
+    def name(self):
+        return self._soup.select_one('#coursename').attrs['title'].strip()
+
+    @property
+    def schedules(self):
+        string = self._soup.select_one('.coursedata-info').text.strip()
+        # TODO: simplify parameter
+        return CourseSchedule.list_entries_from_string(string=string)
+
+    @property
+    def instructors(self):
+        string = self._soup.select_one('.courseteacher').attrs['title'].strip()
+        # TODO: simplify parameter
+        return CourseInstructor.list_entries_from_string(string=string)
+
+
+class Course(SQLScraperModelBase):
+    id = Column(INTEGER, primary_key=True)
+
+    url = Column(TEXT)
     timestamp = Column(DATETIME)
-    hash = Column(INTEGER)
-    key = Column(TEXT)
     name = Column(TEXT)
 
     # TODO: relationship with back_populates
-    schedules = relationship('CourseSchedule', backref='course')
-    instructors = relationship('CourseInstructor', backref='course')
-    course_news = relationship('CourseNews', backref='course')
-    course_contents = relationship('CourseContents', backref='course')
+    schedules = relationship('CourseSchedule', backref='course', lazy="joined")
+    instructors = relationship('CourseInstructor', backref='course', lazy="joined")
 
-    FIELD_NAMES = {'key', 'name', 'year', 'schedules', 'instructors'}
-
-    @classmethod
-    def get_latest_entry_with_same_hash(cls, session: Session, field: dict) -> Optional['Course']:
-        assert isinstance(field, dict)
-        assert set(field.keys()) == cls.FIELD_NAMES
-
-        field_hash = persistent_hash(field)
-
-        course_with_same_hash = session.query(Course).filter(
-            Course.hash == field_hash
-        ).order_by(
-            desc(Course.timestamp)
-        ).first()
-
-        return course_with_same_hash
+    contents_page_list_entries = relationship(
+        'CourseContentsPageList',
+        backref='course',
+        lazy='joined'
+    )
+    news_entries = relationship(
+        'CourseNews',
+        backref='course',
+        lazy='joined'
+    )
 
     @classmethod
-    def insert(cls: Type[T], session: Session, field: dict) -> T:
-        assert isinstance(field, dict)
-        assert set(field.keys()) == cls.FIELD_NAMES
+    def _soup_parser(cls) -> type[SoupParser]:
+        return CourseSoupParser
 
-        course_with_same_hash = cls.get_latest_entry_with_same_hash(session, field)
-        if course_with_same_hash is not None:
-            cls.logger.info(f'insertion cancelled {field!r}')
-            return course_with_same_hash
-
-        course = cls(
-            **create_model_parameters(
-                field,
-                timestamp=True,
-                field_hash=True,
-                keys=['key', 'name']
-            )
+    @classmethod
+    def _create_entry_from_task_entry(
+            cls: type['SQLScraperModelBase'],
+            *,
+            task_entry: model.crawl.Task,
+            soup_parser: SoupParser
+    ) -> 'SQLScraperModelBase':
+        entry = cls(
+            timestamp=task_entry.timestamp,
+            url=task_entry.lookup.url,
+            **soup_parser.extract_properties('name', 'schedules', 'instructors')
         )
-        session.add(course)
 
-        for schedule_field \
-                in CourseSchedule.iter_fields_from_string(field['year'], field['schedules']):
-            CourseSchedule.insert(session, schedule_field, course=course)
+        return entry
 
-        for instructor_field \
-                in CourseInstructor.iter_fields_from_string(field['instructors']):
-            CourseInstructor.insert(session, instructor_field, course=course)
-
-        cls.logger.info(f'insertion done {field!r}')
-
-        return course
+    def _set_parent_model_entry(
+            self,
+            parent_model_entries: ParentModelEntries
+    ):
+        pass

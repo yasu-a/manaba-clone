@@ -1,297 +1,35 @@
-import hashlib
-from typing import Optional, Type, TypeVar, NamedTuple
+from sqlalchemy import func, and_
+from sqlalchemy.orm import Session
 
-from sqlalchemy import ForeignKey, desc, func, case
-from sqlalchemy.orm import Session, relationship
-from sqlalchemy.schema import Column, Index
-from sqlalchemy.types import INTEGER, TEXT, DATETIME, UnicodeText
-
-from model.common import SQLDataModelMixin, create_timestamp
-from .base import SQLCrawlerDataModelBase
-
-T = TypeVar('T')
+from .job import Job
+from .lookup import Lookup
+from .page import PageContent
+from .task import Task
 
 
-def string_hash_63(string: Optional[str]) -> int:
-    if string is None:
-        return 1
-    bytes_digest = hashlib.sha3_256(string.encode('utf-8')).digest()
-    return int.from_bytes(bytes_digest[:8], byteorder='big') >> 1
-
-
-class CrawlingSession(SQLDataModelMixin, SQLCrawlerDataModelBase):
-    id = Column(INTEGER, primary_key=True, nullable=False)
-    timestamp = Column(DATETIME)
-
-    @classmethod
-    def get_new_session(
-            cls: Type['CrawlingSession'],
-            session: Session,
-    ) -> 'CrawlingSession':
-        entry = cls(timestamp=create_timestamp())
-        session.add(entry)
-        return entry
-
-    @classmethod
-    def get_resumed_session(
-            cls: Type['CrawlingSession'],
-            session: Session,
-    ) -> 'CrawlingSession':
-        entry = session.query(CrawlingSession).order_by(
-            desc(CrawlingSession.timestamp)
-            # desc(CrawlingSession.timestamp)
-        ).limit(1).first()
-        if entry is None:
-            raise ValueError('no entries to be resumed')
-        return entry
-
-
-# noinspection PyShadowingBuiltins
-class Lookup(SQLDataModelMixin, SQLCrawlerDataModelBase):
-    id = Column(INTEGER, primary_key=True, nullable=False)
-    url = Column(TEXT, unique=True)
-
-    id_index = Index('id')
-    url_index = Index('url')
-
-    __UNSPECIFIED = object()
-
-    @classmethod
-    def _is_specified(cls, obj):
-        return obj is not cls.__UNSPECIFIED
-
-    @classmethod
-    def _is_unspecified(cls, obj):
-        return obj is cls.__UNSPECIFIED
-
-    @classmethod
-    def lookup(
-            cls: Type['Lookup'],
-            session: Session,
-            *,
-            id: Optional[int] = __UNSPECIFIED,
-            url: Optional[str] = __UNSPECIFIED
-    ) -> 'Lookup':
-        if (cls._is_specified(id) and cls._is_specified(url)) \
-                or (cls._is_unspecified(id) and cls._is_unspecified(url)):
-            raise ValueError('either \'id\' or \'url\' should be specified')
-
-        if cls._is_specified(id):
-            filter_predicate = Lookup.id == id
-        elif cls._is_specified(url):
-            filter_predicate = Lookup.url == url
-        else:
-            assert False
-
-        entry = session.query(Lookup).filter(
-            filter_predicate
-        ).first()
-
-        if entry is not None:
-            return entry
-
-        if cls._is_specified(id):
-            raise ValueError(f'unregistered {id=!r}')
-        elif cls._is_specified(url):
-            entry = cls(id=string_hash_63(url), url=url)
-        else:
-            assert False
-
-        session.add(entry)
-
-        return entry
-
-
-class URLLinkage(NamedTuple):
-    url: Optional[str]
-    back_url: str
-
-
-# noinspection PyPep8
-class Task(SQLDataModelMixin, SQLCrawlerDataModelBase):
-    id = Column(INTEGER, primary_key=True, nullable=False)
-    session_id = Column(INTEGER, ForeignKey('crawling_session.id'), nullable=False)
-    url_id = Column(INTEGER, ForeignKey('lookup.id'), nullable=False)
-    back_url_id = Column(INTEGER, ForeignKey('lookup.id'))
-    timestamp = Column(DATETIME, nullable=False)
-    page_id = Column(INTEGER, ForeignKey('page_content.id'))
-
-    crawling_session = relationship('CrawlingSession', foreign_keys=[session_id])
-    lookup = relationship('Lookup', foreign_keys=[url_id])
-    back_lookup = relationship('Lookup', foreign_keys=[back_url_id])
-    page = relationship('PageContent', foreign_keys=[page_id])
-
-    @classmethod
-    def set_initial_urls(
-            cls: Type['Task'],
-            session: Session,
-            *,
-            crawling_session: CrawlingSession,
-            initial_urls: list[str]
-    ) -> bool:
-        entry_count = session.query(Task).filter(
-            Task.crawling_session == crawling_session
-        ).count()
-
-        if entry_count > 0:
-            return False
-
-        for url in initial_urls:
-            cls.new_record(
-                session=session,
-                crawling_session=crawling_session,
-                lookup=Lookup.lookup(
-                    session,
-                    url=url
-                ),
-                back_lookup=Lookup.lookup(
-                    session,
-                    url=None
-                )
-            )
-        return True
-
-    @classmethod
-    def new_record(
-            cls: Type['Task'],
-            session: Session,
-            *,
-            crawling_session: CrawlingSession,
-            lookup: Lookup,
-            back_lookup: Lookup
-    ) -> 'Task':
-        entry_count = session.query(Task).filter(
-            (Task.crawling_session == crawling_session) &
-            (Task.lookup == lookup) &
-            (Task.back_lookup == back_lookup)
-        ).count()
-
-        if entry_count > 0:
-            raise ValueError('all tasks with the same session should be unique')
-
-        entry = cls(
-            crawling_session=crawling_session,
-            lookup=lookup,
-            back_lookup=back_lookup,
-            timestamp=create_timestamp(),
-            page=None
-        )
-        session.add(entry)
-
-        return entry
-
-    # noinspection PyComparisonWithNone,PyPep8
-    @classmethod
-    def open_task(
-            cls: Type['Task'],
-            session: Session,
-            *,
-            crawling_session: CrawlingSession,
-    ) -> Optional['Task']:
-        entry = session.query(Task).filter(
-            (Task.crawling_session == crawling_session) &
-            (Task.page == None)
-        ).order_by(
-            desc(Task.timestamp)
-        ).limit(1).first()
-
-        if entry is None:
-            return None
-
-        return entry
-
-    @classmethod
-    def close_task(
-            cls: Type['Task'],
-            session: Session,
-            *,
-            task: 'Task',
-            content: Optional[str]
-    ) -> None:
-        task.page = PageContent.new_record(
-            session,
-            content=content
-        )
-
-    @classmethod
-    def fill_pages(
-            cls: Type['Task'],
-            session: Session,
-            *,
-            crawling_session: CrawlingSession,
-    ) -> int:
-        # noinspection PyTypeChecker
-        task_with_page_iter = session.query(Task, PageContent).filter(
-            (Task.crawling_session == crawling_session) &
-            (Task.page_id == PageContent.id)
-        )
-
-        lookup_to_page = {}
-        for task, page in task_with_page_iter:
-            lookup_to_page[task.url_id] = page.id
-
-        no_tasks_with_page = len(lookup_to_page) == 0
-        if no_tasks_with_page:
-            return 0
-
-        # noinspection PyTypeChecker,PyComparisonWithNone
-        row_count = session.query(Task).filter(
-            (Task.crawling_session == crawling_session) &
-            (Task.page == None) &
-            (Task.url_id.in_(lookup_to_page.keys()))
-        ).update({
-            Task.page_id: case(
-                lookup_to_page,
-                value=Task.url_id
-            )
-        }, synchronize_session='fetch')
-
-        return row_count
-
-
-# TODO: Change mapping into content_hash -> content; store timestamp in Task, not in this table.
-#       This change can reduce the size of database.
-class PageContent(SQLDataModelMixin, SQLCrawlerDataModelBase):
-    id = Column(INTEGER, primary_key=True, nullable=False)
-    timestamp = Column(DATETIME, nullable=False)
-    content = Column(UnicodeText)
-    content_hash = Column(INTEGER, nullable=False)
-
-    @classmethod
-    def new_record(
-            cls: Type['PageContent'],
-            session: Session,
-            *,
-            content: Optional[str]
-    ) -> 'PageContent':
-        entry = cls(
-            timestamp=create_timestamp(),
-            content=content,
-            content_hash=string_hash_63(content)
-        )
-        session.add(entry)
-        return entry
-
-
-# noinspection PyComparisonWithNone,PyPep8
+# noinspection PyShadowingNames
 def info_dict(
         session: Session,
         *,
-        crawling_session: CrawlingSession
+        job: Job
 ) -> dict[str, object]:
     return {
-        'tasks without content':
+        'unfinished_task_count':
             session.query(func.count(Task.id)).filter(
-                (Task.page_id == None) &
-                (Task.crawling_session == crawling_session)
+                and_(
+                    Task.page_id.is_(None),
+                    Task.job == job
+                )
             ).scalar(),
-        'tasks with content':
+        'finished_task_count':
             session.query(func.count(Task.id)).filter(
-                (Task.page_id != None) &
-                (Task.crawling_session == crawling_session)
+                and_(
+                    Task.page_id.is_not(None),
+                    Task.job == job
+                )
             ).scalar(),
-        'pages in db':
+        'whole_page_count':
             session.query(func.count(PageContent.id)).scalar(),
-        'lut size':
+        'whole_lookup_count':
             session.query(func.count(Lookup.id)).scalar(),
     }

@@ -3,15 +3,16 @@ from unittest import TestCase
 from sqlalchemy.orm import aliased
 
 import app_logging
-import crawl
 import model.crawl
 import opener
 from generate_html import create_test_case, TestCaseGenerationFailureError
-from sessctx import SessionContext
+from worker import crawl
 
 # TODO: organize code
 
 logger = app_logging.create_logger()
+
+USE_MEMORY_DB = False
 
 
 class TestOpenerBasedCrawler(TestCase):
@@ -26,6 +27,8 @@ class TestOpenerBasedCrawler(TestCase):
         setattr(cls, new_method_name, wrapper)
 
     def crawl(self, seed):
+        app_logging.set_level(app_logging.WARNING)
+
         try:
             files, answers = create_test_case(
                 num_htmls=50,
@@ -39,10 +42,7 @@ class TestOpenerBasedCrawler(TestCase):
 
         create_new_session = True
 
-        session_context = SessionContext.create_instance(
-            ':memory:',
-            model.crawl.SQLCrawlerDataModelBase
-        )
+        session_context = model.create_session_context(':memory:' if USE_MEMORY_DB else None)
 
         with opener.MemoryURLOpener(
                 files=files
@@ -53,7 +53,7 @@ class TestOpenerBasedCrawler(TestCase):
             )
 
             if create_new_session:
-                manaba_crawler.initialize(
+                manaba_crawler.initialize_tasks(
                     initial_urls=['0.html']
                 )
 
@@ -74,15 +74,23 @@ class TestOpenerBasedCrawler(TestCase):
             self.assertFalse(len(answers))
 
 
-for seed in range(10):
-    TestOpenerBasedCrawler.add_test_for_seed(
-        'crawl',
-        seed=seed
-    )
+def setup_test():
+    for seed in range(10):
+        TestOpenerBasedCrawler.add_test_for_seed(
+            'crawl',
+            seed=seed
+        )
+
+
+setup_test()
 
 
 def fetch_answers(session):
-    crawling_session = model.crawl.CrawlingSession.get_resumed_session(session)
+    job = model.crawl.Job.get_job(
+        session,
+        state='finished',
+        order='latest'
+    )
 
     lookup = aliased(model.crawl.Lookup)
     back_lookup = aliased(model.crawl.Lookup)
@@ -90,7 +98,7 @@ def fetch_answers(session):
     query = session.query(
         model.crawl.Task
     ).filter(
-        model.crawl.Task.session_id == crawling_session.id
+        model.crawl.Task.job_id == job.id
     ).join(
         lookup,
         model.crawl.Task.url_id == lookup.id

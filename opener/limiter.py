@@ -9,7 +9,7 @@ logger = app_logging.create_logger()
 
 
 class URLRateLimiter:
-    def __init__(self, sleep=2):
+    def __init__(self, sleep):
         logger.info(f'initialized with {sleep=}')
         self.__sleep = sleep
         self.__last_time_blocking_finished = collections.defaultdict(float)

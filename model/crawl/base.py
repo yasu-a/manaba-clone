@@ -1,8 +1,8 @@
-from typing import TypeVar
+from model import SQLDataModelMixin, SQLDataModelBase
 
-from sqlalchemy.ext.declarative import declarative_base
 
-# TODO: diuse this
-T = TypeVar('T')
+class SQLCrawlerModelBase(SQLDataModelBase, SQLDataModelMixin):
+    __abstract__ = True
 
-SQLCrawlerDataModelBase = declarative_base()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
