@@ -121,7 +121,7 @@ def set_level(level):
         logger.setLevel(level)
 
 
-# FIXME: creating logger in a function creates duplicate log messeges
+# FIXME: creating logger in a function creates duplicate log messages
 def create_logger(name=None, cls: type = None) -> logging.Logger:
     module_name, class_name, function_name = None, None, None
 
