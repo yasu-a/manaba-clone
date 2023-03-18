@@ -5,8 +5,8 @@ from sqlalchemy.orm import aliased
 import app_logging
 import model.crawl
 import opener
+import worker.crawl
 from generate_html import create_test_case, TestCaseGenerationFailureError
-from worker import crawl
 
 # TODO: organize code
 
@@ -47,7 +47,7 @@ class TestOpenerBasedCrawler(TestCase):
         with opener.MemoryURLOpener(
                 files=files
         ) as url_opener:
-            manaba_crawler = crawl.OpenerBasedCrawler(
+            manaba_crawler = worker.crawl.OpenerBasedCrawler(
                 session_context=session_context,
                 url_opener=url_opener
             )
