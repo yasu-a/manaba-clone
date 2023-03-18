@@ -14,7 +14,7 @@ def main():
 
     mnb = scrape.ManabaScraper(
         session_context=session_context,
-        max_process_count=300
+        max_process_count=None
     )
 
     # noinspection PyUnusedLocal

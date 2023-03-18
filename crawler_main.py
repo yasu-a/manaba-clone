@@ -8,7 +8,6 @@ from worker import crawl
 logger = app_logging.create_logger()
 
 COOKIE_FILE_PATH = 'cookie.txt'
-DATABASE_PATH = 'db/database.db'
 
 
 def main():
@@ -22,7 +21,7 @@ def main():
 
     with opener.ManabaURLOpener(
             cookie_file_name=COOKIE_FILE_PATH,
-            rate_limiter=opener.URLRateLimiter(sleep=2)
+            rate_limiter=opener.URLRateLimiter(sleep=20)
     ) as url_opener:
         url_opener.login(lcm)
 
