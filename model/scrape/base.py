@@ -1,10 +1,11 @@
 from abc import abstractmethod
-from typing import Optional, Any
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
 import model.crawl
 from model import SQLDataModelMixin, SQLDataModelBase
+from model.session_util import SQLDataModelDuplicationFinderMixin
 from .soup_parser import SoupParser
 
 
@@ -24,7 +25,11 @@ class ParentModelEntries:
         raise ValueError(f'no entry with {model_class_name=} in ancestors: {entries=}')
 
 
-class SQLScraperModelBase(SQLDataModelBase, SQLDataModelMixin):
+class SQLScraperModelBase(
+    SQLDataModelBase,
+    SQLDataModelMixin,
+    SQLDataModelDuplicationFinderMixin
+):
     __abstract__ = True
 
     def __init__(self, *args, **kwargs):
@@ -35,20 +40,7 @@ class SQLScraperModelBase(SQLDataModelBase, SQLDataModelMixin):
     def _soup_parser(cls) -> type[SoupParser]:
         raise NotImplementedError()
 
-    @classmethod
-    def find_duplication(
-            cls,
-            session: Session,
-            *,
-            values: dict[str, Any]
-    ) -> Optional['SQLScraperModelBase']:
-        query = session.query(cls)
-        for name, value in values.items():
-            attribute = getattr(cls, name)
-            query = query.where(attribute == value)
-        dup_entry = query.first()
-        return dup_entry
-
+    # TODO: remove and replace this method, which only delegates cls.find_duplication
     @classmethod
     def get_dup_entry(
             cls,
