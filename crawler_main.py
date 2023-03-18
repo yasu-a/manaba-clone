@@ -3,7 +3,7 @@ import cert
 import launch_cert_server
 import model.crawl
 import opener
-from worker import crawl
+import worker.crawl
 
 logger = app_logging.create_logger()
 
@@ -25,14 +25,14 @@ def main():
     ) as url_opener:
         url_opener.login(lcm)
 
-        manaba_crawler = crawl.ManabaCrawler(
+        manaba_crawler = worker.crawl.ManabaCrawler(
             session_context=model.create_session_context(),
             url_opener=url_opener
         )
 
         if create_new_session:
             manaba_crawler.initialize_tasks_by_period(
-                period=crawl.ManabaCrawler.PERIOD_ALL
+                period=worker.crawl.ManabaCrawler.PERIOD_ALL
             )
 
         manaba_crawler.crawl(resume_state=manaba_crawler.RESUME_LATEST)

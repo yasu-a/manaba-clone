@@ -1,6 +1,6 @@
 import app_logging
 import model.scrape
-from worker import scrape
+import worker.scrape
 
 logger = app_logging.create_logger()
 
@@ -12,7 +12,7 @@ def main():
 
     logger.info('scraper main')
 
-    mnb = scrape.ManabaScraper(
+    mnb = worker.scrape.ManabaScraper(
         session_context=session_context,
         max_process_count=None
     )
