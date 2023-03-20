@@ -12,8 +12,11 @@ from .page_family import *
 
 class AbstractCrawler(metaclass=ABCMeta):
     @abstractmethod
+    def _page_family(self) -> type[PageFamily]:
+        raise NotImplementedError()
+
     def _group_url(self, url: str) -> Optional[GroupedURL]:
-        return GroupedURL(url=url, group_name='<unset>')
+        return self._page_family().apply_maps(url)
 
     @abstractmethod
     def _retrieve_content_and_soup(self, url: str) -> tuple[str, bs4.BeautifulSoup]:
@@ -60,10 +63,6 @@ class DatabaseBasedCrawler(AbstractCrawler, metaclass=ABCMeta):
 
     def __init__(self, session_context: SessionContext):
         self.__session_context = session_context
-
-    @abstractmethod
-    def _page_family(self) -> PageFamily:
-        raise NotImplementedError()
 
     def initialize_tasks(self, initial_urls: list[str]) -> None:
         with self.__session_context() as session:

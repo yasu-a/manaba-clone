@@ -19,7 +19,12 @@ class GroupedURL(NamedTuple):
     def __hash__(self):
         return hash(self.url)
 
-    def is_child_of(self, parent_grouped_url: 'GroupedURL', *, page_family: 'PageFamily') -> bool:
+    def is_child_of(
+            self,
+            parent_grouped_url: 'GroupedURL',
+            *,
+            page_family: type['PageFamily']
+    ) -> bool:
         this_group = page_family.find_page_group_by_name(self.group_name)
         if this_group is None:
             return False
@@ -73,8 +78,26 @@ class PageGroup(NamedTuple):
         )
 
     @classmethod
-    def from_args(cls, *, name, domain, path_pattern, url_mappers, parent):
-        e = TypeError('invalid type of arg')
+    def from_args(
+            cls,
+            *,
+            name,
+            domain,
+            path_pattern,
+            url_mappers,
+            parent,
+            _allow_parent_as_string=False
+    ):
+        e = TypeError(
+            'invalid type of arg',
+            dict(
+                name=name,
+                domain=domain,
+                path_pattern=path_pattern,
+                url_mappers=url_mappers,
+                parent=parent
+            )
+        )
 
         if not isinstance(name, str):
             raise e
@@ -94,8 +117,13 @@ class PageGroup(NamedTuple):
         if not all(map(callable, url_mappers)):
             raise e
 
-        if parent is not None and not isinstance(parent, PageGroup):
-            raise e
+        if parent is not None:
+            if not isinstance(parent, PageGroup):
+                if _allow_parent_as_string:
+                    raise e
+                else:
+                    if not isinstance(parent, str):
+                        raise e
 
         return cls(
             name=name,
@@ -112,20 +140,49 @@ class PageGroupGeneratorParams(dict):
 
 class PageFamilyMeta(type):
     @staticmethod
-    def extract_page_groups(dct):
-        page_groups = {}
-        for name, obj in dct.items():
-            if isinstance(obj, PageGroupGeneratorParams):
-                params = obj
+    def extract_page_groups(namespace_dct):
+        def set_name(dct: dict[str, dict]) -> dict[str, dict]:
+            for name, params in dct.items():
                 params['name'] = name
-                if params['parent']:
-                    params['parent'] = page_groups[params['parent']['name']]
-                page_group = PageGroup.from_args(**params)
-                page_groups[name] = page_group
-        dct.update(page_groups)
-        dct['_page_groups'] = page_groups
+            return dct
 
-        return dct
+        def parse_parent_to_name(dct: dict[str, dict]) -> dict[str, dict]:
+            for name, params in dct.items():
+                # Here, params['parent'] is either dict of params itself or string
+                # describes the name.
+                if isinstance(params['parent'], dict):
+                    params['parent'] = params['parent']['name']
+            return dct
+
+        def instantiate(dct: dict[str, dict]) -> dict[str, PageGroup]:
+            new_dct = {}
+            for name, params in dct.items():
+                new_dct[name] = PageGroup.from_args(**params)
+            return new_dct
+
+        def resolve_parent(dct: dict[str, PageGroup]) -> dict[str, PageGroup]:
+            new_dct = {}
+            for name, pg in dct.items():
+                # set None or replace if parent is not None
+                # TODO: PageGroup parent linking which not dependent on its instance
+                # noinspection PyTypeChecker
+                new_dct[name] = pg.parent and pg._replace(parent=dct[pg.parent])
+            return new_dct
+
+        obj_dct = {
+            name: obj
+            for name, obj in namespace_dct.items()
+            if isinstance(obj, PageGroupGeneratorParams)
+        }
+        obj_dct = set_name(obj_dct)
+        obj_dct = parse_parent_to_name(obj_dct)
+        pg_dct = instantiate(obj_dct)
+        pg_dct = resolve_parent(pg_dct)
+
+        namespace_dct.update(pg_dct)
+        namespace_dct['_page_groups'] = pg_dct
+
+        return namespace_dct
 
     def __new__(mcs, name, bases, dct):
         dct = mcs.extract_page_groups(dct)
