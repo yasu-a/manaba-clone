@@ -126,3 +126,12 @@ class LocalSessionContextGenerator(SessionContextGeneratorBase):
     def from_path_and_base(cls, path: str, base):
         url = cls.URL_FORMAT.format(path=path)
         return cls.from_url_and_base(url, base)
+
+
+class RemoteSessionContextGenerator(SessionContextGeneratorBase):
+    URL_FORMAT: str = None
+
+    @classmethod
+    def from_path_and_base(cls, user: str, pw: str, host: str, path: str, base):
+        url = cls.URL_FORMAT.format(user=user, pw=pw, host=host, path=path)
+        return cls.from_url_and_base(url, base)

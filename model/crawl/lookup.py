@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import Column, Index
-from sqlalchemy.types import INTEGER, TEXT
+from sqlalchemy.types import TEXT, VARCHAR, BigInteger
 
 from worker.crawl.page_family import GroupedURL
 from .base import SQLCrawlerModelBase
@@ -9,8 +9,8 @@ from .common import string_hash_63
 
 # noinspection PyShadowingBuiltins
 class Lookup(SQLCrawlerModelBase):
-    id = Column(INTEGER, primary_key=True, nullable=False)
-    url = Column(TEXT, unique=True)
+    id = Column(BigInteger, primary_key=True, nullable=False)
+    url = Column(VARCHAR(512), unique=True)
     group_name = Column(TEXT)
 
     id_index = Index('id')

@@ -3,7 +3,7 @@ from typing import Optional, Union, Iterable, TYPE_CHECKING
 from sqlalchemy import ForeignKey, case, desc, and_
 from sqlalchemy.orm import Session, relationship, aliased
 from sqlalchemy.schema import Column
-from sqlalchemy.types import INTEGER, DATETIME
+from sqlalchemy.types import INTEGER, DATETIME, BigInteger
 
 from model import create_timestamp
 from worker.crawl.page_family import GroupedURL
@@ -20,8 +20,8 @@ class Task(SQLCrawlerModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
 
     job_id = Column(INTEGER, ForeignKey('job.id'), nullable=False)
-    url_id = Column(INTEGER, ForeignKey('lookup.id'), nullable=False)
-    back_url_id = Column(INTEGER, ForeignKey('lookup.id'))
+    url_id = Column(BigInteger, ForeignKey('lookup.id'), nullable=False)
+    back_url_id = Column(BigInteger, ForeignKey('lookup.id'))
     timestamp = Column(DATETIME, nullable=False)
     page_id = Column(INTEGER, ForeignKey('page_content.id'))
 

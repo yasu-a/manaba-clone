@@ -2,7 +2,7 @@ from typing import Optional, Type
 
 from sqlalchemy.orm import Session
 from sqlalchemy.schema import Column
-from sqlalchemy.types import INTEGER, DATETIME, UnicodeText
+from sqlalchemy.types import INTEGER, DATETIME, UnicodeText, BigInteger
 
 from model import create_timestamp
 from .base import SQLCrawlerModelBase
@@ -16,7 +16,7 @@ class PageContent(SQLCrawlerModelBase):
     id = Column(INTEGER, primary_key=True, nullable=False)
     timestamp = Column(DATETIME, nullable=False)
     content = Column(UnicodeText)
-    content_hash = Column(INTEGER, nullable=False)
+    content_hash = Column(BigInteger, nullable=False)
 
     @classmethod
     def new_record(

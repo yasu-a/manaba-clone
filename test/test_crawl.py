@@ -3,6 +3,7 @@ from unittest import TestCase
 from sqlalchemy.orm import aliased
 
 import app_logging
+import model
 import model.crawl
 import opener
 import worker.crawl
@@ -15,6 +16,18 @@ logger = app_logging.create_logger()
 app_logging.set_level(app_logging.INFO)
 
 USE_MEMORY_DB = True
+
+# TODO: use polymorphism
+
+# noinspection PyUnresolvedReferences,PyProtectedMember
+if model.creator._SCG is not model.creator.SQLiteSessionContextGenerator:
+    USE_MEMORY_DB = False
+
+# noinspection PyUnresolvedReferences,PyProtectedMember
+if model.creator._SCG is model.creator.SQLiteSessionContextGenerator:
+    DB_NAME = 'debug.db'
+elif model.creator._SCG is model.creator.MySQLSessionContextGenerator:
+    DB_NAME = 'manaba_clone_debug'
 
 
 class PageFamilyForDebug(PageFamily):
@@ -54,7 +67,7 @@ class TestOpenerBasedCrawler(TestCase):
             return
 
         session_context = model.create_session_context(
-            ':memory:' if USE_MEMORY_DB else 'debug.db'
+            ':memory:' if USE_MEMORY_DB else DB_NAME
         )
 
         with opener.MemoryURLOpener(
