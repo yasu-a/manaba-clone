@@ -1,6 +1,10 @@
 import urllib.parse
 
-from .page_family import PageFamily, page_group_with_domain
+# try-except clause required for main process below
+try:
+    from .page_family import PageFamily, page_group_with_domain
+except ImportError:
+    from page_family import PageFamily, page_group_with_domain
 
 
 class ManabaPageFamily(PageFamily):

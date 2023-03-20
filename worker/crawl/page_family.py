@@ -166,7 +166,8 @@ class PageFamilyMeta(type):
                 # set None or replace if parent is not None
                 # TODO: PageGroup parent linking which not dependent on its instance
                 # noinspection PyTypeChecker
-                new_dct[name] = pg.parent and pg._replace(parent=dct[pg.parent])
+                parent_pg = pg.parent and dct[pg.parent]
+                new_dct[name] = pg._replace(parent=parent_pg)
             return new_dct
 
         obj_dct = {
