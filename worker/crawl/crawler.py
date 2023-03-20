@@ -105,7 +105,7 @@ class DatabaseBasedCrawler(AbstractCrawler, metaclass=ABCMeta):
     def _process_job(self, resume_state) -> bool:
         crawling_executed = False
 
-        self.logger.info('CRAWLING SESSION BEGIN')
+        self.logger.info('JOB BEGIN')
 
         with self.__session_context() as session:
             # TODO: most of cpu time in this function spent here
@@ -114,7 +114,7 @@ class DatabaseBasedCrawler(AbstractCrawler, metaclass=ABCMeta):
                 state='unfinished',
                 order=resume_state
             )
-            self.logger.info(f'crawling session acquired: {job=}')
+            self.logger.info(f'job acquired: {job=}')
 
             fill_count = model.crawl.Task.fill_pages(
                 session,
@@ -182,7 +182,7 @@ class DatabaseBasedCrawler(AbstractCrawler, metaclass=ABCMeta):
                 f'[SUMMARY] {k!s:30s} {v!r:>8s}' for k, v in info_dict.items()
             ))
 
-            self.logger.info('CRAWLING SESSION END')
+            self.logger.info('JOB END')
 
         return crawling_executed
 
