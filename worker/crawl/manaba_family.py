@@ -1,8 +1,6 @@
-try:
-    from .page_family import PageFamily, page_group_with_domain
-except ImportError:
-    from page_family import PageFamily, page_group_with_domain
 import urllib.parse
+
+from .page_family import PageFamily, page_group_with_domain
 
 
 class ManabaPageFamily(PageFamily):

@@ -1,11 +1,9 @@
-from typing import Optional
-
 import model.crawl
 import opener
 from sessctx import SessionContext
 from .crawler import OpenerBasedCrawler
 from .manaba_family import ManabaPageFamily
-from .page_family import GroupedURL, PageFamily
+from .page_family import PageFamily
 
 
 class HomeCoursePeriod(tuple):
@@ -34,9 +32,6 @@ class ManabaCrawler(OpenerBasedCrawler):
 
     def _page_family(self) -> type[PageFamily]:
         return ManabaPageFamily
-
-    def _group_url(self, url: str) -> Optional[GroupedURL]:
-        return self._page_family().apply_maps(url)
 
     PERIOD_CURRENT = HomeCoursePeriod([''])
     PERIOD_PAST = HomeCoursePeriod(['_past'])
