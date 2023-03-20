@@ -17,6 +17,8 @@ def main():
     logger.info('crawler main')
     lcm = cert.SocketLoginCertManager(launch_cert_server.HOST, launch_cert_server.PORT)
 
+    session_context = model.create_session_context()
+
     create_new_session = input('new session [y/n] > ').lower() == 'y'
     logger.info(f'{create_new_session=}')
 
@@ -27,7 +29,7 @@ def main():
         url_opener.login(lcm)
 
         manaba_crawler = worker.crawl.ManabaCrawler(
-            session_context=model.create_session_context(),
+            session_context=session_context,
             url_opener=url_opener
         )
 
