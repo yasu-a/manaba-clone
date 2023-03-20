@@ -23,7 +23,7 @@ def main():
         order='oldest'
     )
 
-    mnb.reset_database()
+    # mnb.reset_database()
     mnb.scrape_all()
 
 

@@ -19,7 +19,7 @@ def main():
 
     with opener.ManabaURLOpener(
             cookie_file_name=COOKIE_FILE_PATH,
-            rate_limiter=opener.URLRateLimiter(sleep=20)
+            rate_limiter=opener.URLRateLimiter(sleep=5)  # TODO: configure sleep outside of script
     ) as url_opener:
         url_opener.login(lcm)
 
