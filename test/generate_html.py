@@ -77,6 +77,8 @@ def create_answer(mapping: dict[str, list[str]]) -> dict[tuple[str, str], Answer
     htmls = dict(iter_htmls_from_mapping(mapping))
     for src_name, names in mapping.items():
         for name in names:
+            if src_name == name:
+                continue
             answer = AnswerEntry(
                 name=name,
                 back_name=src_name,

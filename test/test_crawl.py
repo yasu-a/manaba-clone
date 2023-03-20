@@ -7,12 +7,26 @@ import model.crawl
 import opener
 import worker.crawl
 from generate_html import create_test_case, TestCaseGenerationFailureError
+from worker.crawl.page_family import PageFamily, page_group_with_domain
 
 # TODO: organize code
 
 logger = app_logging.create_logger()
 
 USE_MEMORY_DB = False
+
+
+class PageFamilyForDebug(PageFamily):
+    with page_group_with_domain(domain='') as debug_page_group:
+        node = debug_page_group(
+            path_pattern=r'.*',
+            parent='node'
+        )
+
+
+class CrawlerForDebug(worker.crawl.OpenerBasedCrawler):
+    def _page_family(self) -> type[PageFamily]:
+        return PageFamilyForDebug
 
 
 class TestOpenerBasedCrawler(TestCase):
@@ -27,8 +41,6 @@ class TestOpenerBasedCrawler(TestCase):
         setattr(cls, new_method_name, wrapper)
 
     def crawl(self, seed):
-        app_logging.set_level(app_logging.WARNING)
-
         try:
             files, answers = create_test_case(
                 num_htmls=50,
@@ -40,24 +52,23 @@ class TestOpenerBasedCrawler(TestCase):
             logger.error(e)
             return
 
-        create_new_session = True
-
-        session_context = model.create_session_context(':memory:' if USE_MEMORY_DB else None)
+        session_context = model.create_session_context(
+            ':memory:' if USE_MEMORY_DB else 'debug.db'
+        )
 
         with opener.MemoryURLOpener(
                 files=files
         ) as url_opener:
-            manaba_crawler = worker.crawl.OpenerBasedCrawler(
+            crawler = CrawlerForDebug(
                 session_context=session_context,
                 url_opener=url_opener
             )
 
-            if create_new_session:
-                manaba_crawler.initialize_tasks(
-                    initial_urls=['0.html']
-                )
+            crawler.initialize_tasks(
+                initial_urls=['0.html']
+            )
 
-            manaba_crawler.crawl()
+            crawler.crawl(resume_state=crawler.RESUME_LATEST)
 
         with session_context() as session:
             lst = fetch_answers(session)
@@ -71,7 +82,7 @@ class TestOpenerBasedCrawler(TestCase):
                 logger.info(f'{name=}, {back_name=}, {content and len(content)=}, {entry=}')
                 self.assertTrue(entry.content == content)
 
-            self.assertFalse(len(answers))
+            self.assertFalse(answers)
 
 
 def setup_test():
@@ -113,13 +124,3 @@ def fetch_answers(session):
     lst = query.all()
 
     return lst
-
-# if __name__ == '__main__':
-#     session_context = SessionContext.create_instance(
-#         'crawl_test.db',
-#         model.crawl.SQLCrawlerDataModelBase
-#     )
-#     from pprint import pprint
-#
-#     with session_context() as session:
-#         pprint(fetch_answers(session))
