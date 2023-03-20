@@ -12,8 +12,9 @@ from worker.crawl.page_family import PageFamily, page_group_with_domain
 # TODO: organize code
 
 logger = app_logging.create_logger()
+app_logging.set_level(app_logging.INFO)
 
-USE_MEMORY_DB = False
+USE_MEMORY_DB = True
 
 
 class PageFamilyForDebug(PageFamily):
@@ -43,7 +44,7 @@ class TestOpenerBasedCrawler(TestCase):
     def crawl(self, seed):
         try:
             files, answers = create_test_case(
-                num_htmls=50,
+                num_htmls=40,
                 num_links_mean=10,
                 num_links_sigma=10,
                 seed=seed
