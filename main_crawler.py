@@ -1,5 +1,6 @@
 import app_logging
 import cert
+import env
 import launch_cert_server
 import model.crawl
 import opener
@@ -21,7 +22,7 @@ def main():
 
     with opener.ManabaURLOpener(
             cookie_file_name=COOKIE_FILE_PATH,
-            rate_limiter=opener.URLRateLimiter(sleep=20)  # TODO: configure sleep outside of script
+            rate_limiter=opener.URLRateLimiter(sleep=env.get('MANABA_CLONE_CRAWLER_SLEEP'))
     ) as url_opener:
         url_opener.login(lcm)
 
